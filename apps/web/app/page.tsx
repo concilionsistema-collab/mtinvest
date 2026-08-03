@@ -13,15 +13,6 @@ const metrics = [
   ['\uEAFD', 'VGV Este Mês', 'R$ 4.850.000', '↗ 32% vs mês anterior', 'gold'],
 ];
 
-const metricIconImages: Record<string, string> = {
-  purple: '/metric-leads-3d.png',
-  blue: '/metric-negotiations-3d.png',
-  cyan: '/metric-properties-3d.png',
-  orange: '/metric-visits-3d.png',
-  green: '/metric-sales-3d.png',
-  gold: '/metric-revenue-3d.png',
-};
-
 const activities = [
   ['\uE717', 'green', 'Ligar para Maria Silva', 'Contato inicial', '09:00'],
   ['\uE724', 'orange', 'Enviar proposta Apto. Jardins', 'Proposta aguardando', '10:30'],
@@ -29,14 +20,6 @@ const activities = [
   ['\uE8BD', 'emerald', 'Follow-up João Souza', 'Negociação em andamento', '15:30'],
   ['\uE8A5', 'purple', 'Assinar contrato - Apto. 502', 'Documentação', '16:00'],
 ];
-
-const activityIconImages: Record<string, string> = {
-  green: '/activity-phone.png',
-  orange: '/activity-plane.png',
-  blue: '/activity-calendar.png',
-  emerald: '/activity-whatsapp.png',
-  purple: '/activity-document.png',
-};
 
 const leadSources = [
   ['Site / Portal', 38, '474'],
@@ -61,7 +44,7 @@ export default function DashboardPage() {
   return (
     <main className="dashboard">
       <div className="metric-grid">
-        {metrics.map(([, label, value, delta, color]) => <article className={`metric metric--${color}`} key={label}><span className="metric-icon"><img src={metricIconImages[color]} alt="" aria-hidden="true" /></span><div><small>{label}</small><strong>{value}</strong><em>{delta}</em></div></article>)}
+        {metrics.map(([icon, label, value, delta, color]) => <article className={`metric metric--${color}`} key={label}><span className="metric-icon fluent" aria-hidden="true">{icon}</span><div><small>{label}</small><strong>{value}</strong><em>{delta}</em></div></article>)}
       </div>
 
       <div className="dashboard-row dashboard-row--top">
@@ -91,7 +74,7 @@ export default function DashboardPage() {
         </Panel>
 
         <Panel title="Atividades de Hoje" action="Ver todas" className="activity-panel">
-          <ul className="activity-list">{activities.map(([,tone,title,sub,time])=><li key={title}><span className={`activity-icon activity-icon--${tone}`}><img src={activityIconImages[tone]} alt="" aria-hidden="true" /></span><div><b>{title}</b><small>{sub}</small></div><time>{time}</time></li>)}</ul>
+          <ul className="activity-list">{activities.map(([icon,tone,title,sub,time])=><li key={title}><span className={`activity-icon activity-icon--${tone} fluent`} aria-hidden="true">{icon}</span><div><b>{title}</b><small>{sub}</small></div><time>{time}</time></li>)}</ul>
         </Panel>
       </div>
 

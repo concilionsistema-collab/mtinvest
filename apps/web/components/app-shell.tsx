@@ -7,19 +7,19 @@ import { useAuth } from './auth-context';
 
 const nav = [
   {href:'/',icon:'\uE80F',label:'Dashboard'},
-  {href:'/leads',icon:'\uE77B',label:'Leads',asset:'/metric-leads-3d.png'},
-  {href:'/imoveis',icon:'\uE821',label:'Imóveis',asset:'/metric-properties-3d.png'},
-  {href:'/oportunidades',icon:'\uE81C',label:'Negociações',asset:'/metric-negotiations-3d.png'},
-  {href:'/unidades',icon:'\uE716',label:'Unidades',asset:'/metric-properties-3d.png'},
-  {href:'/visitas',icon:'\uECA5',label:'Visitas',asset:'/metric-visits-3d.png'},
+  {href:'/leads',icon:'\uE77B',label:'Leads'},
+  {href:'/imoveis',icon:'\uE821',label:'Imóveis'},
+  {href:'/oportunidades',icon:'\uE81C',label:'Negociações'},
+  {href:'/unidades',icon:'\uE716',label:'Unidades'},
+  {href:'/visitas',icon:'\uECA5',label:'Visitas'},
   {href:'/propostas',icon:'\uE8A5',label:'Propostas'},
-  {href:'/contratos',icon:'\uE73E',label:'Contratos',asset:'/metric-sales-3d.png'},
+  {href:'/contratos',icon:'\uE73E',label:'Contratos'},
   {href:'/carteiras',icon:'\uE7EE',label:'Carteiras'},
   {href:'/tarefas',icon:'\uE9D5',label:'Tarefas'},
   {href:'/funil',icon:'\uE9D2',label:'Funil de Vendas'},
   {href:'/marketing',icon:'\uE719',label:'Marketing'},
   {href:'/relatorios',icon:'\uE9D9',label:'Relatórios'},
-  {href:'/financeiro',icon:'\uE8C7',label:'Financeiro',asset:'/metric-revenue-3d.png'},
+  {href:'/financeiro',icon:'\uE8C7',label:'Financeiro'},
   {href:'/configuracoes',icon:'\uE713',label:'Configurações'},
   {href:'/locacao',icon:'\uE8F1',label:'Locação'},
 ] as const;
@@ -44,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return <div className={`app-frame premium-app-frame${menuRecolhido?' app-frame--collapsed':''}`}>
     <aside className="app-sidebar premium-sidebar">
       <div className="brand tenant-brand"><div className="tenant-brand__identity"><img src="/mt-invest-shield.png" alt="Escudo MT INVEST"/><img src="/mt-invest-wordmark.png" alt="MT INVEST"/></div><button type="button" onClick={()=>setMenuRecolhido((atual)=>!atual)} aria-label={menuRecolhido?'Expandir menu':'Recolher menu'} aria-expanded={!menuRecolhido}>☰</button></div>
-      <nav>{nav.map((item,index)=><Link key={item.href} href={item.href} aria-label={item.label} className={pathname===item.href?'active':''}><span className={`premium-nav-icon premium-nav-icon--${index+1}`}>{'asset' in item?<img src={item.asset} alt=""/>:<span className="fluent">{item.icon}</span>}</span><b>{item.label}</b><i aria-hidden="true">›</i></Link>)}</nav>
+      <nav>{nav.map((item,index)=><Link key={item.href} href={item.href} aria-label={item.label} className={pathname===item.href?'active':''}><span className={`premium-nav-icon premium-nav-icon--${index+1}`}><span className="fluent" aria-hidden="true">{item.icon}</span></span><b>{item.label}</b><i aria-hidden="true">›</i></Link>)}</nav>
       <div className="mobile-card"><div className="phone-mock"><span>⌂</span><span>◫</span><span>♙</span><span>▦</span></div><div><b>CIONLARIS</b><small>Mobile</small><p>Gerencie seu negócio<br/>de onde estiver.</p><em> App Store</em><em>▶ Google Play</em></div></div>
       {pathname==='/imoveis'?<div className="property-sidebar-summary"><b>Resumo de Imóveis</b><ul><li><span>Total de imóveis</span><strong>356</strong></li><li><span>Disponíveis</span><strong>248</strong></li><li><span>Em negociação</span><strong>78</strong></li><li><span>Vendidos (mês)</span><strong>30</strong></li></ul></div>:pathname==='/oportunidades'?<div className="negotiation-sidebar-user"><span className="avatar">JC</span><div><b>João Corretor</b><small>joao@imobicrm.com</small></div><button>⌄</button></div>:<div className="goal-card"><div><b>Meta do mês</b><span>ⓘ</span></div><div className="goal-body"><div className="goal-ring">72%</div><p><strong>R$ 144.000</strong><small>de R$ 200.000</small><small>Meta de vendas</small></p></div></div>}
       <div className="system-creator-brand"><small>CRM desenvolvido por</small><img src="/cionlaris-logo-transparent.png" alt="CIONLARIS CRM Imobiliário by Concilion"/></div>

@@ -49,8 +49,9 @@ html[data-theme] .premium-sidebar nav a{border-color:transparent;border-bottom-c
 html[data-theme] .premium-sidebar nav a:hover{border-color:var(--border);background:var(--bg-card-elevated);color:var(--text-primary)}
 html[data-theme] .premium-sidebar nav a.active{border-color:color-mix(in srgb,var(--primary) 46%,var(--border));background:color-mix(in srgb,var(--primary) 16%,var(--bg-card));color:var(--text-primary);box-shadow:inset 3px 0 var(--primary),0 8px 20px color-mix(in srgb,#000 18%,transparent)}
 html[data-theme] .premium-sidebar nav a.active>i{background:var(--primary);box-shadow:none}
-html[data-theme] .premium-nav-icon{border-color:var(--border);background:var(--bg-card-elevated);box-shadow:inset 0 1px color-mix(in srgb,#fff 10%,transparent),inset 0 -6px 12px color-mix(in srgb,#000 15%,transparent),0 6px 12px color-mix(in srgb,#000 20%,transparent)}
-html[data-theme] .premium-nav-icon>.fluent{color:var(--secondary);text-shadow:none}
+html[data-theme] .premium-nav-icon{border-color:transparent;background:transparent;box-shadow:none}
+html[data-theme] .premium-nav-icon>.fluent{color:var(--text-secondary);text-shadow:none;transition:color .18s ease,transform .18s ease}
+html[data-theme] .premium-sidebar nav a:hover .premium-nav-icon>.fluent,html[data-theme] .premium-sidebar nav a.active .premium-nav-icon>.fluent{color:var(--primary);transform:scale(1.06)}
 html[data-theme] .premium-sidebar .tenant-brand>button{border-color:var(--border);background:var(--bg-card);color:var(--primary);box-shadow:0 7px 16px color-mix(in srgb,#000 18%,transparent);text-shadow:none}
 html[data-theme] .premium-sidebar .system-creator-brand{border-color:var(--border)}
 
@@ -67,7 +68,18 @@ html[data-theme] :is(.metric,.dash-panel,.leads-surface,.lead-kanban-card,.hot-l
 html[data-theme] :is(.lead-kpi,.lead-kanban-column,.deals-surface,.deals-kpi,.deals-stage,.deals-card,.property-performance-grid>article,.featured-properties article,.property-modal,.lead-modal,.deals-modal){border-color:var(--border);background:var(--bg-card);color:var(--text-primary)}
 html[data-theme] :is(.metric,.dash-panel,.lead-kanban-card,.portfolio-surface,.property-kpi):hover{border-color:color-mix(in srgb,var(--primary) 30%,var(--border));background:var(--bg-card-elevated)}
 html[data-theme] .metric--gold{background:var(--bg-card)}
-html[data-theme] .metric-icon,html[data-theme] .activity-icon{border:1px solid var(--border);background:var(--bg-card-elevated);color:var(--primary);box-shadow:none}
+html[data-theme] .metric-icon,html[data-theme] .activity-icon{border:0;background:transparent;color:var(--primary);box-shadow:none;text-shadow:none}
+html[data-theme] .metric-icon{font-size:28px}
+html[data-theme] .metric--purple .metric-icon{color:var(--primary)}
+html[data-theme] .metric--blue .metric-icon,html[data-theme] .metric--cyan .metric-icon{color:var(--secondary)}
+html[data-theme] .metric--orange .metric-icon,html[data-theme] .metric--gold .metric-icon{color:var(--warning)}
+html[data-theme] .metric--green .metric-icon{color:var(--success)}
+html[data-theme] .activity-panel .activity-list li>.activity-icon{border:0;background:transparent;box-shadow:none;transform:none;font-size:22px}
+html[data-theme] .activity-panel .activity-list li>.activity-icon:before,html[data-theme] .activity-panel .activity-list li>.activity-icon:after{display:none}
+html[data-theme] .activity-icon--green,html[data-theme] .activity-icon--emerald{color:var(--success)}
+html[data-theme] .activity-icon--orange{color:var(--warning)}
+html[data-theme] .activity-icon--blue{color:var(--secondary)}
+html[data-theme] .activity-icon--purple{color:var(--primary)}
 html[data-theme] .metric em{color:var(--success)}
 html[data-theme] .panel-head button,html[data-theme] .panel-head>a,html[data-theme] .map-toolbar button{border-color:var(--border);background:var(--bg-card-elevated);color:var(--text-secondary)}
 html[data-theme] .panel-head button:hover,html[data-theme] .panel-head>a:hover,html[data-theme] .map-toolbar button:hover{border-color:var(--primary);background:var(--primary);color:#fff}
@@ -107,7 +119,6 @@ html[data-theme] .maplibre-view-controls button.active{background:var(--primary)
 .theme-option--executive-dark{--preview-bg:#111318;--preview-sidebar:#171A21;--preview-card:#20242D;--preview-primary:#3B82F6;--preview-border:#323845}.theme-option--corporate-light{--preview-bg:#F3F6FA;--preview-sidebar:#FFFFFF;--preview-card:#FFFFFF;--preview-primary:#2563EB;--preview-border:#DDE3EB}.theme-option--midnight-emerald{--preview-bg:#071411;--preview-sidebar:#0B1C18;--preview-card:#102620;--preview-primary:#10B981;--preview-border:#23473D}.theme-option--graphite-copper{--preview-bg:#151414;--preview-sidebar:#1C1A19;--preview-card:#272321;--preview-primary:#C47A4A;--preview-border:#443A35}
 
 [data-theme="corporate-light"] .premium-sidebar :is(.tenant-brand__identity img,.system-creator-brand img){filter:saturate(.7) brightness(.72)}
-[data-theme="corporate-light"] .premium-nav-icon>img,[data-theme="corporate-light"] .metric-icon img{filter:saturate(.72) brightness(.82)}
 [data-theme="corporate-light"] .maplibregl-canvas{filter:saturate(.72) contrast(1.03) brightness(.94)}
 [data-theme="corporate-light"] .avatar{color:#172033}
 
