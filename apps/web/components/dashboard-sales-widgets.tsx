@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 
 const ETAPAS = [
-  { nome: 'Novos Leads', valor: '1.248', percentual: '100%', largura: 100, cor: '#8753ff' },
-  { nome: 'Qualificados', valor: '876', percentual: '70%', largura: 86, cor: '#2d91ff' },
-  { nome: 'Visitas', valor: '482', percentual: '39%', largura: 72, cor: '#3ed6cb' },
-  { nome: 'Propostas', valor: '187', percentual: '15%', largura: 58, cor: '#ffad2f' },
-  { nome: 'Negociação', valor: '74', percentual: '6%', largura: 44, cor: '#ff6259' },
-  { nome: 'Fechados', valor: '28', percentual: '2%', largura: 30, cor: '#5bd985' },
+  { nome: 'Novos Leads', valor: '1.248', percentual: '100%', largura: 100, cor: '#2563EB' },
+  { nome: 'Qualificados', valor: '876', percentual: '70%', largura: 86, cor: '#5B78A6' },
+  { nome: 'Visitas', valor: '482', percentual: '39%', largura: 72, cor: '#737E8F' },
+  { nome: 'Propostas', valor: '187', percentual: '15%', largura: 58, cor: '#C59B57' },
+  { nome: 'Negociação', valor: '74', percentual: '6%', largura: 44, cor: '#C56565' },
+  { nome: 'Fechados', valor: '28', percentual: '2%', largura: 30, cor: '#4E9F78' },
 ] as const;
 
 const VENDAS = [0.2,0.62,0.88,1.16,1.08,1.42,1.25,1.7,1.95,1.58,1.82,2.18,2.04,2.34,2.25,2.42,2.31,2.68,2.94,2.76,3.18,3.42,3.3,3.72,3.62,4.18,4.62,5.2,5.62,5.36];
@@ -70,26 +70,26 @@ export function PremiumSalesPerformance() {
       contexto.textBaseline = 'middle';
       for (let nivel = 0; nivel <= 6; nivel += 1) {
         const posicaoY = y(nivel);
-        contexto.strokeStyle = nivel === 0 ? 'rgba(94,122,150,.32)' : 'rgba(82,108,136,.18)';
+        contexto.strokeStyle = nivel === 0 ? 'rgba(167,176,190,.28)' : 'rgba(115,126,143,.16)';
         contexto.lineWidth = 1;
         contexto.setLineDash(nivel === 0 ? [] : [3, 5]);
         contexto.beginPath();
         contexto.moveTo(margem.esquerda, posicaoY);
         contexto.lineTo(largura - margem.direita, posicaoY);
         contexto.stroke();
-        contexto.fillStyle = '#c0cad5';
+        contexto.fillStyle = '#A7B0BE';
         contexto.fillText(nivel === 0 ? '0' : `${nivel}M`, margem.esquerda - 8, posicaoY);
       }
 
       [0,4,9,14,19,24,29].forEach((indice) => {
         const posicaoX = x(indice);
-        contexto.strokeStyle = 'rgba(82,108,136,.13)';
+        contexto.strokeStyle = 'rgba(115,126,143,.13)';
         contexto.setLineDash([3, 6]);
         contexto.beginPath();
         contexto.moveTo(posicaoX, margem.topo);
         contexto.lineTo(posicaoX, altura - margem.inferior);
         contexto.stroke();
-        contexto.fillStyle = '#c8d1da';
+        contexto.fillStyle = '#737E8F';
         contexto.textAlign = 'center';
         contexto.fillText(String(indice + 1).padStart(2, '0'), posicaoX, altura - 9);
       });
@@ -109,9 +109,9 @@ export function PremiumSalesPerformance() {
       }
 
       const gradiente = contexto.createLinearGradient(0, margem.topo, 0, altura - margem.inferior);
-      gradiente.addColorStop(0, 'rgba(135,75,255,.52)');
-      gradiente.addColorStop(0.62, 'rgba(108,57,218,.20)');
-      gradiente.addColorStop(1, 'rgba(90,44,184,.02)');
+      gradiente.addColorStop(0, 'rgba(37,99,235,.34)');
+      gradiente.addColorStop(0.62, 'rgba(37,99,235,.13)');
+      gradiente.addColorStop(1, 'rgba(37,99,235,.01)');
       tracar(VENDAS);
       contexto.lineTo(x(VENDAS.length - 1), altura - margem.inferior);
       contexto.lineTo(x(0), altura - margem.inferior);
@@ -120,24 +120,24 @@ export function PremiumSalesPerformance() {
       contexto.fill();
 
       tracar(META);
-      contexto.strokeStyle = '#249dff';
+      contexto.strokeStyle = '#7184A3';
       contexto.lineWidth = 2;
       contexto.setLineDash([7, 6]);
-      contexto.shadowColor = 'rgba(36,157,255,.55)';
-      contexto.shadowBlur = 5;
+      contexto.shadowColor = 'rgba(0,0,0,0)';
+      contexto.shadowBlur = 0;
       contexto.stroke();
 
       tracar(VENDAS);
-      contexto.strokeStyle = '#9859ff';
+      contexto.strokeStyle = '#2563EB';
       contexto.lineWidth = 2;
       contexto.setLineDash([]);
-      contexto.shadowColor = 'rgba(152,89,255,.75)';
-      contexto.shadowBlur = 8;
+      contexto.shadowColor = 'rgba(0,0,0,0)';
+      contexto.shadowBlur = 0;
       contexto.stroke();
       contexto.shadowBlur = 0;
 
       const ativoX = x(indiceAtivo);
-      contexto.strokeStyle = 'rgba(160,179,199,.35)';
+      contexto.strokeStyle = 'rgba(167,176,190,.28)';
       contexto.lineWidth = 1;
       contexto.setLineDash([]);
       contexto.beginPath();
@@ -145,12 +145,12 @@ export function PremiumSalesPerformance() {
       contexto.lineTo(ativoX, altura - margem.inferior);
       contexto.stroke();
 
-      [[VENDAS[indiceAtivo], '#9c5cff'], [META[indiceAtivo], '#23a1ff']].forEach(([valor, cor]) => {
+      [[VENDAS[indiceAtivo], '#2563EB'], [META[indiceAtivo], '#7184A3']].forEach(([valor, cor]) => {
         contexto.beginPath();
         contexto.arc(ativoX, y(Number(valor)), 4.5, 0, Math.PI * 2);
         contexto.fillStyle = String(cor);
         contexto.shadowColor = String(cor);
-        contexto.shadowBlur = 10;
+        contexto.shadowBlur = 0;
         contexto.fill();
         contexto.shadowBlur = 0;
       });
