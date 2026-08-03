@@ -11,7 +11,11 @@
   "scripts": {
     "build": "npm run build --workspace=packages/shared && npm run build --workspace=apps/api && npm run build --workspace=apps/web",
     "typecheck": "npm run typecheck --workspace=packages/shared && npm run typecheck --workspace=apps/api && npm run typecheck --workspace=apps/web",
-    "test": "npm run test --workspace=apps/api"
+    "test": "npm run test --workspace=apps/api",
+    "crm:start": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/crm-supervisor.ps1 -OpenBrowser",
+    "crm:stop": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/stop-crm.ps1",
+    "crm:install-autostart": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-crm-autostart.ps1",
+    "crm:remove-autostart": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/remove-crm-autostart.ps1"
   },
   "engines": {
     "node": ">=20"
