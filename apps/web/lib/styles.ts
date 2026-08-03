@@ -15,7 +15,7 @@ export const buttonStyle: CSSProperties = {
   borderRadius: '0.375rem',
   border: 'none',
   background: 'var(--color-accent)',
-  color: '#0b0d12',
+  color: '#ffffff',
   fontWeight: 600,
   cursor: 'pointer',
 };

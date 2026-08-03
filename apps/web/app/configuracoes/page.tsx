@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Usuario } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
+import { THEMES, useTheme } from '../../components/theme-context';
 import { apiFetch, ApiError } from '../../lib/api';
 import { buttonStyle, cardStyle, inputStyle } from '../../lib/styles';
 
@@ -14,6 +15,7 @@ const ROTULOS_PERFIL: Record<Usuario['perfil'], string> = {
 
 export default function ConfiguracoesPage() {
   const { sessao } = useAuth();
+  const { tema, definirTema } = useTheme();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [erroPerfil, setErroPerfil] = useState<string | null>(null);
 
@@ -58,6 +60,28 @@ export default function ConfiguracoesPage() {
       <p style={{ color: 'var(--muted)', fontSize: 12 }}>
         Dados da sua própria conta. Configurações da unidade/rede ficam em Unidades.
       </p>
+
+      <section className="appearance-settings" aria-labelledby="appearance-title">
+        <header className="appearance-settings__head">
+          <div><h2 id="appearance-title">Aparência</h2><p>Escolha o tema visual do Concilion CRM. Sua preferência fica salva neste dispositivo.</p></div>
+          <span className="appearance-settings__current">Tema atual: {THEMES.find((item) => item.id === tema)?.nome}</span>
+        </header>
+        <div className="theme-selector" role="group" aria-label="Temas do sistema">
+          {THEMES.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={`theme-option theme-option--${item.id}${tema === item.id ? ' active' : ''}`}
+              aria-pressed={tema === item.id}
+              onClick={() => definirTema(item.id)}
+            >
+              {item.recomendado && <em className="theme-option__recommended">Padrão recomendado</em>}
+              <span className="theme-option__preview" aria-hidden="true"><i className="theme-option__sidebar"/><span className="theme-option__content"><i/><i/><i/></span></span>
+              <span className="theme-option__copy"><span><b>{item.nome}</b><small>{item.descricao}</small></span><i className="theme-option__check" aria-hidden="true">✓</i></span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <h2 style={{ fontSize: 14, marginTop: 20 }}>Meus dados</h2>
       {erroPerfil && <p>{erroPerfil}</p>}
