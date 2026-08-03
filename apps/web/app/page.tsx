@@ -53,6 +53,14 @@ const properties = [
 ];
 const propertyTargets = ['AP-101', 'COB-201', 'ST-401'];
 
+const concilionIntelligence = [
+  { icon: '\uE945', tone: 'recommendation', eyebrow: 'Ação recomendada', title: 'Priorize as negociações ativas', detail: '74 oportunidades estão na etapa decisiva e pedem contato nas próximas 24 horas.' },
+  { icon: '\uE7BA', tone: 'risk', eyebrow: 'Alerta comercial', title: '12 propostas aguardam retorno', detail: 'O tempo sem interação já ultrapassa três dias e eleva o risco de perda.' },
+  { icon: '\uE81C', tone: 'opportunity', eyebrow: 'Oportunidade', title: 'Jardins lidera a intenção', detail: 'A região concentra demanda qualificada e imóveis com maior potencial de conversão.' },
+  { icon: '\uE9D2', tone: 'bottleneck', eyebrow: 'Gargalo', title: 'Visitas convertem pouco em propostas', detail: 'A passagem de visitas para propostas merece revisão de abordagem e acompanhamento.' },
+  { icon: '\uE9D9', tone: 'forecast', eyebrow: 'Previsão de resultado', title: 'VGV projetado em R$ 6,2 mi', detail: 'O ritmo atual indica avanço consistente para a meta comercial do mês.' },
+] as const;
+
 function Panel({ title, action, actionHref, className = '', children }: { title: string; action?: string; actionHref?: string; className?: string; children: React.ReactNode }) {
   return <section className={`dash-panel ${className}`}><div className="panel-head"><h2>{title}</h2>{action && (actionHref ? <Link href={actionHref}>{action}</Link> : <button type="button">{action}</button>)}</div>{children}</section>;
 }
@@ -63,6 +71,22 @@ export default function DashboardPage() {
       <div className="metric-grid">
         {metrics.map(([, label, value, delta, color]) => <article className={`metric metric--${color}`} key={label}><span className="metric-icon"><img src={metricIconImages[color]} alt="" aria-hidden="true" /></span><div><small>{label}</small><strong>{value}</strong><em>{delta}</em></div></article>)}
       </div>
+
+      <section className="concilion-intelligence" aria-labelledby="concilion-intelligence-title">
+        <header className="concilion-intelligence__head">
+          <span className="concilion-intelligence__brand fluent" aria-hidden="true">&#xE99A;</span>
+          <div><h2 id="concilion-intelligence-title">Inteligência Concilion</h2><p>Leitura executiva com recomendações acionáveis para o resultado comercial.</p></div>
+          <span className="concilion-intelligence__status"><i /> Atualizado agora</span>
+        </header>
+        <div className="concilion-intelligence__grid">
+          {concilionIntelligence.map((item) => (
+            <article className={`intelligence-insight intelligence-insight--${item.tone}`} key={item.eyebrow}>
+              <span className="intelligence-insight__icon fluent" aria-hidden="true">{item.icon}</span>
+              <div><small>{item.eyebrow}</small><b>{item.title}</b><p>{item.detail}</p></div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <div className="dashboard-row dashboard-row--top">
         <Panel title="Funil de Vendas" className="funnel-panel">
@@ -99,7 +123,7 @@ export default function DashboardPage() {
         <Panel title="Mapa de Vendas" className="map-panel">
           <div className="map-toolbar"><small>Visualização dos imóveis e negociações por localização</small><div><button>Todos os imóveis⌄</button><span>○ Disponível</span><span>○ Em negociação</span><span>○ Vendido</span></div></div>
           <div className="map-stage">
-            <MapLibreSalesMap />
+            <MapLibreSalesMap allowStyleToggle />
           </div>
         </Panel>
 
