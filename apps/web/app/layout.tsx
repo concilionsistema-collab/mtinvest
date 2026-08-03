@@ -7,8 +7,8 @@ import { AuthProvider } from '../components/auth-context';
 import { AppShell } from '../components/app-shell';
 
 export const metadata: Metadata = {
-  title: 'Concilion CRM | MT Invest',
-  description: 'Concilion CRM para a operação imobiliária da MT Invest.',
+  title: 'MT INVEST | CIONLARIS CRM',
+  description: 'CRM imobiliário da MT INVEST, criado pela CIONLARIS by Concilion.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -24,14 +24,11 @@ const IMOVEIS_NO_MAPA = [
   { posicao: 'inferior-direita', lng: -56.0930, lat: -13.8470, titulo: 'Casa Jardim', preco: 'R$ 980.000', detalhes: '195m² · 3 quartos', status: 'Em negociação', foto: 1 },
 ] as const;
 
-type MapAppearance = 'satellite' | 'dark';
-
-export function MapLibreSalesMap({ appearance = 'satellite', allowStyleToggle = false }: { appearance?: MapAppearance; allowStyleToggle?: boolean }) {
+export function MapLibreSalesMap({ appearance = 'satellite' }: { appearance?: 'satellite' | 'dark' }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [erro, setErro] = useState(false);
   const [modo3d, setModo3d] = useState(false);
-  const [estilo, setEstilo] = useState<MapAppearance>(appearance);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -55,23 +52,23 @@ export function MapLibreSalesMap({ appearance = 'satellite', allowStyleToggle = 
       const camadas = mapa.getStyle().layers ?? [];
       const primeiraCamadaDeTexto = camadas.find((camada) => camada.type === 'symbol')?.id;
 
-      if (estilo === 'dark') {
+      if (appearance === 'dark') {
         camadas.forEach((camada) => {
           const id = camada.id.toLowerCase();
-          if (camada.type === 'background') mapa.setPaintProperty(camada.id, 'background-color', '#0E1117');
+          if (camada.type === 'background') mapa.setPaintProperty(camada.id, 'background-color', '#09192b');
           if (camada.type === 'fill') {
-            const cor = id.includes('water') ? '#17263A' : id.includes('park') || id.includes('landuse') ? '#182820' : id.includes('building') ? '#202735' : '#151A24';
+            const cor = id.includes('water') ? '#0a2d49' : id.includes('park') || id.includes('landuse') ? '#0d2a2b' : id.includes('building') ? '#14283a' : '#0c1d30';
             mapa.setPaintProperty(camada.id, 'fill-color', cor);
             mapa.setPaintProperty(camada.id, 'fill-opacity', id.includes('building') ? 0.64 : 0.9);
           }
           if (camada.type === 'line') {
-            const cor = id.includes('road') || id.includes('street') ? '#3B4554' : id.includes('water') ? '#294564' : '#293442';
+            const cor = id.includes('road') || id.includes('street') ? '#45505c' : id.includes('water') ? '#174264' : '#263a50';
             mapa.setPaintProperty(camada.id, 'line-color', cor);
-            mapa.setPaintProperty(camada.id, 'line-opacity', id.includes('road') || id.includes('street') ? 0.7 : 0.52);
+            mapa.setPaintProperty(camada.id, 'line-opacity', id.includes('road') || id.includes('street') ? 0.84 : 0.62);
           }
           if (camada.type === 'symbol') {
-            mapa.setPaintProperty(camada.id, 'text-color', '#A7B0BE');
-            mapa.setPaintProperty(camada.id, 'text-halo-color', '#0E1117');
+            mapa.setPaintProperty(camada.id, 'text-color', '#c3ccd5');
+            mapa.setPaintProperty(camada.id, 'text-halo-color', '#071522');
             mapa.setPaintProperty(camada.id, 'text-halo-width', 1);
           }
         });
@@ -103,7 +100,7 @@ export function MapLibreSalesMap({ appearance = 'satellite', allowStyleToggle = 
         }, primeiraCamadaDeTexto);
       }
 
-      if (estilo === 'satellite') {
+      if (appearance === 'satellite') {
       mapa.addSource(FONTE_SATELITE, {
         type: 'raster',
         tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
@@ -157,7 +154,7 @@ export function MapLibreSalesMap({ appearance = 'satellite', allowStyleToggle = 
         lat: number;
       }> = [];
 
-      (estilo === 'dark' ? IMOVEIS_NO_MAPA.slice(0, 3) : IMOVEIS_NO_MAPA).forEach((imovel) => {
+      (appearance === 'dark' ? IMOVEIS_NO_MAPA.slice(0, 3) : IMOVEIS_NO_MAPA).forEach((imovel) => {
         const raiz = document.createElement('div');
         raiz.className = 'maplibre-property-marker';
 
@@ -228,7 +225,7 @@ export function MapLibreSalesMap({ appearance = 'satellite', allowStyleToggle = 
       mapRef.current = null;
       mapa.remove();
     };
-  }, [estilo]);
+  }, [appearance]);
 
   function definirPerspectiva(ativar3d: boolean) {
     const mapa = mapRef.current;
@@ -241,26 +238,15 @@ export function MapLibreSalesMap({ appearance = 'satellite', allowStyleToggle = 
     mapa.easeTo({ pitch: ativar3d ? 46 : 0, bearing: ativar3d ? -18 : 0, duration: 650 });
   }
 
-  function definirEstilo(novoEstilo: MapAppearance) {
-    if (novoEstilo === estilo) return;
-    setErro(false);
-    setModo3d(false);
-    setEstilo(novoEstilo);
-  }
-
   return (
-    <div className={`maplibre-wrap maplibre-wrap--${estilo}`}>
-      <div ref={containerRef} className="maplibre-map" aria-label={estilo === 'dark' ? 'Mapa Executivo escuro de imóveis por localização' : 'Mapa por satélite de imóveis com cobertura nacional e foco inicial em Nova Mutum'} />
+    <div className="maplibre-wrap">
+      <div ref={containerRef} className="maplibre-map" aria-label={appearance === 'dark' ? 'Mapa escuro de imóveis por localização' : 'Mapa aéreo de imóveis com cobertura nacional e foco inicial em Nova Mutum'} />
       {erro && <div className="maplibre-error">Não foi possível carregar os dados do mapa.</div>}
-      {allowStyleToggle && <div className="maplibre-style-controls" aria-label="Estilo do mapa">
-        <button type="button" className={estilo === 'dark' ? 'active' : ''} aria-pressed={estilo === 'dark'} onClick={() => definirEstilo('dark')}>Mapa Executivo</button>
-        <button type="button" className={estilo === 'satellite' ? 'active' : ''} aria-pressed={estilo === 'satellite'} onClick={() => definirEstilo('satellite')}>Satélite</button>
-      </div>}
-      {estilo === 'satellite' && <div className="maplibre-view-controls" aria-label="Perspectiva do mapa">
+      {appearance === 'satellite' && <div className="maplibre-view-controls" aria-label="Perspectiva do mapa">
         <button type="button" className={!modo3d ? 'active' : ''} aria-pressed={!modo3d} onClick={() => definirPerspectiva(false)}>Aérea</button>
         <button type="button" className={modo3d ? 'active' : ''} aria-pressed={modo3d} onClick={() => definirPerspectiva(true)}>3D</button>
       </div>}
-      <div className="maplibre-brand"><span className="fluent">&#xE707;</span><b>Concilion Maps</b><small>{estilo === 'dark' ? 'Cartografia executiva · visão comercial' : 'Imagem aérea contínua · cobertura nacional'}</small></div>
+      {appearance === 'satellite' && <div className="maplibre-brand"><span className="fluent">&#xE707;</span><b>ImobiCRM Maps</b><small>Imagem aérea contínua · cobertura nacional</small></div>}
     </div>
   );
 }

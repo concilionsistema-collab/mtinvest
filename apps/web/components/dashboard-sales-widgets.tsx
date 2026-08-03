@@ -6,8 +6,8 @@ const ETAPAS = [
   { nome: 'Novos Leads', valor: '1.248', percentual: '100%', largura: 100, cor: '#2563EB' },
   { nome: 'Qualificados', valor: '876', percentual: '70%', largura: 86, cor: '#5B78A6' },
   { nome: 'Visitas', valor: '482', percentual: '39%', largura: 72, cor: '#737E8F' },
-  { nome: 'Propostas', valor: '187', percentual: '15%', largura: 58, cor: '#7D8CA3' },
-  { nome: 'Negociação', valor: '74', percentual: '6%', largura: 44, cor: '#C59B57' },
+  { nome: 'Propostas', valor: '187', percentual: '15%', largura: 58, cor: '#C59B57' },
+  { nome: 'Negociação', valor: '74', percentual: '6%', largura: 44, cor: '#C56565' },
   { nome: 'Fechados', valor: '28', percentual: '2%', largura: 30, cor: '#4E9F78' },
 ] as const;
 
@@ -65,7 +65,7 @@ export function PremiumSalesPerformance() {
       const x = (indice: number) => margem.esquerda + (indice / (VENDAS.length - 1)) * areaLargura;
       const y = (valor: number) => margem.topo + areaAltura - (valor / 6) * areaAltura;
 
-      contexto.font = '12px Inter, Segoe UI, sans-serif';
+      contexto.font = '11px Inter, Segoe UI, sans-serif';
       contexto.textAlign = 'right';
       contexto.textBaseline = 'middle';
       for (let nivel = 0; nivel <= 6; nivel += 1) {
