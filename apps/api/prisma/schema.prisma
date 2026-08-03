@@ -1,0 +1,791 @@
+// Modelo de dados nuclear (ART-005) - fatia inicial: Tenant e Unidade (EPIC-01, US-001).
+// Toda tabela marcada "Tenant-scoped: Sim" em ART-005 recebe Row-Level Security
+// (ver migrations/*_rls/migration.sql), conforme DEC-TEC-001 e DEC-TEC-002.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  ATIVO
+  SUSPENSO
+  ENCERRADO
+}
+
+// ART-005, secao 3 - Tenant. Raiz de segregacao; nao e tenant-scoped, e a propria raiz.
+model Tenant {
+  id          String       @id @default(uuid())
+  razaoSocial String       @map("razao_social")
+  status      TenantStatus @default(ATIVO)
+  criadoEm    DateTime     @default(now()) @map("criado_em")
+
+  unidades Unidade[]
+  usuarios Usuario[]
+  leads    Lead[]
+
+  @@map("tenant")
+}
+
+enum UnidadeStatus {
+  ATIVA
+  INATIVA
+}
+
+// ART-005, secao 3 - Unidade. Tenant-scoped: Sim. RN-001 (ART-004): unidade
+// pertence a exatamente um tenant.
+model Unidade {
+  id           String        @id @default(uuid())
+  tenantId     String        @map("tenant_id")
+  nomeFantasia String        @map("nome_fantasia")
+  status       UnidadeStatus @default(ATIVA)
+  eMatriz      Boolean       @default(false) @map("e_matriz")
+  criadoEm     DateTime      @default(now()) @map("criado_em")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  imoveis                    Imovel[]               @relation("ImovelUnidadeProprietaria")
+  compartilhamentosEnvolvido CompartilhamentoDeImovel[]
+  usuarios                   Usuario[]
+  leads                      Lead[]
+  contratosDeAdministracao   ContratoDeAdministracao[]
+
+  @@map("unidade")
+}
+
+enum ImovelFinalidade {
+  VENDA
+  LOCACAO
+  AMBOS
+}
+
+// ART-004, secao 8.2 - estados de compartilhamento de imovel.
+enum ImovelEstadoCompartilhamento {
+  EXCLUSIVO_DA_UNIDADE
+  COMPARTILHADO
+  COMPARTILHADO_EM_NEGOCIACAO
+  ENCERRADO
+}
+
+enum ImovelEscopoCompartilhamento {
+  FECHADO
+  REDE
+  REGIAO
+  LISTA
+}
+
+// ART-005, secao 3 - Imovel. Tenant-scoped: Sim.
+// RN-005 (ART-004): unidade_proprietaria_id e imutavel exceto por
+// transferencia formal de carteira (ainda nao implementada - EPIC-03).
+model Imovel {
+  id                     String                        @id @default(uuid())
+  tenantId               String                        @map("tenant_id")
+  unidadeProprietariaId  String                        @map("unidade_proprietaria_id")
+  finalidade             ImovelFinalidade
+  enderecoResumo         String                        @map("endereco_resumo")
+  // DEC-NEG-013 (pendente): faixa de desconto que o proprietario pre-autoriza
+  // na captacao. Nula = todo desconto exige aprovacao (RN-306, ART-009).
+  valorAnunciado                    Decimal? @db.Decimal(14, 2) @map("valor_anunciado")
+  percentualDescontoPreAutorizado   Decimal? @db.Decimal(5, 2) @map("percentual_desconto_pre_autorizado")
+  estadoCompartilhamento ImovelEstadoCompartilhamento  @default(EXCLUSIVO_DA_UNIDADE) @map("estado_compartilhamento")
+  escopoCompartilhamento ImovelEscopoCompartilhamento? @map("escopo_compartilhamento")
+  criadoEm               DateTime                      @default(now()) @map("criado_em")
+
+  unidadeProprietaria Unidade @relation("ImovelUnidadeProprietaria", fields: [unidadeProprietariaId], references: [id])
+  compartilhamentos   CompartilhamentoDeImovel[]
+  coproprietarios     ImovelCoproprietario[]
+  oportunidades       Oportunidade[]
+  sugestoesRadar      SugestaoRadar[]
+  contratosDeAdministracao ContratoDeAdministracao[]
+
+  @@index([tenantId])
+  @@map("imovel")
+}
+
+enum CompartilhamentoEvento {
+  COMPARTILHADO
+  NEGOCIACAO_INICIADA
+  REVOGADO
+  ENCERRADO
+}
+
+// ART-005, secao 3 - CompartilhamentoDeImovel. Historico append-only (RN-006/RN-007, ART-004).
+model CompartilhamentoDeImovel {
+  id                  String                  @id @default(uuid())
+  tenantId            String                  @map("tenant_id")
+  imovelId            String                  @map("imovel_id")
+  evento              CompartilhamentoEvento
+  unidadeEnvolvidaId  String?                 @map("unidade_envolvida_id")
+  criadoEm            DateTime                @default(now()) @map("criado_em")
+
+  imovel            Imovel   @relation(fields: [imovelId], references: [id])
+  unidadeEnvolvida  Unidade? @relation(fields: [unidadeEnvolvidaId], references: [id])
+
+  @@index([tenantId])
+  @@map("compartilhamento_de_imovel")
+}
+
+enum PessoaTipo {
+  FISICA
+  JURIDICA
+}
+
+// ART-005, secao 3 - Pessoa. Tenant-scoped: Sim. Entidade base reaproveitada
+// como lead/proprietario/inquilino/coproprietario (aqui usada como
+// coproprietario, EPIC-02, US-006).
+// PENDENCIA DE README FECHADA (US-007, CA-002: atomicidade sob concorrencia):
+// antes, a deduplicacao em LeadsService.capturar era "verificar depois agir"
+// sem trava no banco - duas capturas simultaneas do mesmo contato podiam, em
+// teoria, criar duas Pessoa/Lead. As constraints unicas abaixo fecham essa
+// lacuna a nivel de banco (defesa real, nao so aplicacao) - o Postgres trata
+// cada NULL como distinto por padrao em UNIQUE, entao pessoas sem telefone/
+// documento informado continuam podendo coexistir livremente; a unicidade so
+// vale quando o valor normalizado existe. LeadsService.capturar trata o erro
+// de violacao (P2002) refazendo a operacao (ver comentario la).
+model Pessoa {
+  id                    String     @id @default(uuid())
+  tenantId              String     @map("tenant_id")
+  tipo                  PessoaTipo
+  nome                  String
+  documentoNormalizado  String?    @map("documento_normalizado")
+  telefoneNormalizado   String?    @map("telefone_normalizado")
+  criadoEm              DateTime   @default(now()) @map("criado_em")
+
+  coproprietacoes ImovelCoproprietario[]
+  leads           Lead[]
+  contratosDeAdministracaoComoProprietario ContratoDeAdministracao[]
+  contratosDeLocacaoComoInquilino          ContratoDeLocacao[]
+  garantiasComoFiador                      Garantia[]
+
+  @@unique([tenantId, documentoNormalizado])
+  @@unique([tenantId, telefoneNormalizado])
+  @@index([tenantId])
+  @@map("pessoa")
+}
+
+// ART-005, secao 3 - ImovelCoproprietario. Tenant-scoped: Sim.
+// Vigencia temporal (ART-005 secao 5): percentuais mudam ao longo do tempo;
+// uma nova composicao fecha (vigenteAte) a anterior em vez de apagar,
+// preservando a base para calculo financeiro retroativo (ART-008).
+model ImovelCoproprietario {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  imovelId    String    @map("imovel_id")
+  pessoaId    String    @map("pessoa_id")
+  percentual  Decimal   @db.Decimal(5, 2)
+  vigenteDe   DateTime  @db.Date @map("vigente_de")
+  vigenteAte  DateTime? @db.Date @map("vigente_ate")
+  criadoEm    DateTime  @default(now()) @map("criado_em")
+
+  imovel Imovel @relation(fields: [imovelId], references: [id])
+  pessoa Pessoa @relation(fields: [pessoaId], references: [id])
+
+  @@index([tenantId])
+  @@index([imovelId])
+  @@map("imovel_coproprietario")
+}
+
+enum UsuarioStatus {
+  ATIVO
+  AFASTADO
+  DESLIGADO
+}
+
+// EXTENSAO REGISTRADA (US-002/US-003, EPIC-01): ART-006 define 16 perfis
+// (Superadministrador, Gestor da matriz, Financeiro, Juridico, etc.) com uma
+// matriz completa de alcada/acoes criticas/acesso emergencial/dupla
+// aprovacao - a maior parte depende de modulos que ainda nao existem nesta
+// fatia (motor financeiro, locacao, portal do cliente) e de decisoes
+// pendentes (DEC-NEG-002, DEC-NEG-006). Este enum implementa so o subconjunto
+// que a logica de negocio ja construida de fato usa/referencia: quem pode
+// conceder perfil (Gestor de unidade) e quem opera leads/imoveis (Corretor).
+// Os demais 14 perfis de ART-006 ficam para quando os modulos correspondentes
+// existirem - nao inventados aqui como implementados.
+enum UsuarioPerfil {
+  GESTOR_UNIDADE
+  CORRETOR
+}
+
+// ART-005, secao 3 - Usuario. Tenant-scoped: Sim.
+// email/senhaHash: EXTENSAO REGISTRADA para US-002/US-003 (autenticacao
+// real) - nulos para usuarios criados antes desta migration (ver README,
+// secao de bootstrap do primeiro usuario) ate backfill manual; toda criacao
+// nova via API exige os dois.
+model Usuario {
+  id         String        @id @default(uuid())
+  tenantId   String        @map("tenant_id")
+  unidadeId  String        @map("unidade_id")
+  nome       String
+  email      String?
+  senhaHash  String?       @map("senha_hash")
+  perfil     UsuarioPerfil @default(CORRETOR)
+  status     UsuarioStatus @default(ATIVO)
+  criadoEm   DateTime      @default(now()) @map("criado_em")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  unidade Unidade @relation(fields: [unidadeId], references: [id])
+
+  leadsResponsavel Lead[]            @relation("LeadResponsavel")
+  interacoes       InteracaoDeLead[]
+  registrosDeAuditoria RegistroDeAuditoria[]
+  transferenciasOrigem  TransferenciaDeCarteira[] @relation("TransferenciaOrigem")
+  transferenciasDestino TransferenciaDeCarteira[] @relation("TransferenciaDestino")
+  tarefas               Tarefa[]
+  refreshTokens         RefreshToken[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("usuario")
+}
+
+// ART-005, secao 3 - TransferenciaDeCarteira. Tenant-scoped: Sim. RN-008/RN-009
+// (ART-004): item (aqui, sempre Lead - Imovel pertence a Unidade, nao a um
+// Usuario individual nesta fatia, entao carteira de imovel nao se aplica)
+// sem estagio avancado e transferido automaticamente ao desligamento
+// (ver UsuariosService.desligar, sem passar por aqui); item em estagio
+// avancado (RN-009) fica PENDENTE aqui ate o gestor decidir o destino
+// (CarteirasService.decidir) ou o SLA vencer.
+// SLA/ESCALONAMENTO SIMPLIFICADO: slaDecisaoFim usa o valor sugerido em
+// RN-008 (5 dias uteis, hipotese de trabalho ate DEC-NEG-005 ser aprovada).
+// Vencido, o estado muda para ESCALADA_MATRIZ (checagem preguicosa, mesmo
+// padrao de LeadsService.reabrirVencidos) mas nao ha endpoint de acao da
+// matriz nesta fatia - esse perfil nao existe (ver UsuarioPerfil, US-002).
+// O registro fica visivel/rastreavel; a acao humana de fato so pode ser feita
+// hoje por um GESTOR_UNIDADE via update direto no banco, documentado como
+// lacuna conhecida, nao escondida.
+model TransferenciaDeCarteira {
+  id               String                       @id @default(uuid())
+  tenantId         String                       @map("tenant_id")
+  leadId           String                       @map("lead_id")
+  origemUsuarioId  String?                      @map("origem_usuario_id")
+  destinoUsuarioId String?                      @map("destino_usuario_id")
+  estado           TransferenciaCarteiraEstado  @default(PENDENTE)
+  motivo           String
+  slaDecisaoFim    DateTime?                    @map("sla_decisao_fim")
+  criadoEm         DateTime                     @default(now()) @map("criado_em")
+  decididoEm       DateTime?                    @map("decidido_em")
+
+  lead    Lead     @relation(fields: [leadId], references: [id])
+  origem  Usuario? @relation("TransferenciaOrigem", fields: [origemUsuarioId], references: [id])
+  destino Usuario? @relation("TransferenciaDestino", fields: [destinoUsuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, estado])
+  @@map("transferencia_de_carteira")
+}
+
+enum TransferenciaCarteiraEstado {
+  PENDENTE
+  TRANSFERIDA
+  ESCALADA_MATRIZ
+}
+
+// ART-005, secao 3 - RegistroDeAuditoria. Tenant-scoped: Sim. Append-only
+// (secao 7 de ART-005): a camada de acesso a dados nunca expoe update/delete
+// para esta entidade - so create (AuditoriaService.registrarTx) e leitura.
+// ATUALIZADO (pos identidade-real + moverEstagioTx generico): Lead.estado e
+// Oportunidade.estado ja tem cobertura completa (todo caminho de escrita passa
+// por um chamador com ator humano real, exceto distribuicao/reabertura 100%
+// automatica de fila, que nao tem ator - ver comentario em
+// LeadsService.distribuirLead). TransferenciaDeCarteira.estado (US-010,
+// CA-002) tambem gera RegistroDeAuditoria agora - ver CarteirasService.
+// ConfiguracaoGlobal/Local e AcessoDetalhadoMatriz continuam nao existindo
+// nesta fatia (nao ha "Administrador da rede" nem fluxo de acesso da matriz
+// implementados - mesma simplificacao de perfis do US-002).
+// ATUALIZADO (jobs reais, ver SchedulerService): atorUsuarioId agora e
+// opcional - NULL representa um "ator sistema" (varredura automatica agendada,
+// sem usuario humano por tras), fechando a lacuna registrada anteriormente
+// ("RegistroDeAuditoria.atorUsuarioId e obrigatorio... sem conceito de 'ator
+// sistema' nesta fatia"). Continua obrigatorio (nao-NULL) em toda acao com
+// ator humano real - nunca foi relaxado para essas.
+model RegistroDeAuditoria {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  atorUsuarioId String?  @map("ator_usuario_id")
+  acao          String
+  entidadeTipo  String   @map("entidade_tipo")
+  entidadeId    String   @map("entidade_id")
+  motivo        String?
+  criadoEm      DateTime @default(now()) @map("criado_em")
+
+  ator Usuario? @relation(fields: [atorUsuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, entidadeTipo, entidadeId])
+  @@map("registro_de_auditoria")
+}
+
+// ART-004, secao 8.1 - estados de lead. "Novo" e transitorio (deduplicacao
+// ocorre antes de persistir) - por isso nao existe como estado armazenado.
+enum LeadEstado {
+  EM_FILA_DE_DISTRIBUICAO
+  DISTRIBUIDO
+  EM_ATENDIMENTO
+  INATIVO
+  CONVERTIDO
+}
+
+// ART-005, secao 3 - Lead. Tenant-scoped: Sim.
+// RN-002 (ART-004): lead pertence a uma unidade e, dentro dela, a um
+// responsavel (ou fila, se responsavelUsuarioId for nulo).
+model Lead {
+  id                     String      @id @default(uuid())
+  tenantId               String      @map("tenant_id")
+  unidadeId              String      @map("unidade_id")
+  pessoaId               String      @map("pessoa_id")
+  responsavelUsuarioId   String?     @map("responsavel_usuario_id")
+  estado                 LeadEstado  @default(EM_FILA_DE_DISTRIBUICAO)
+  janelaExclusividadeFim DateTime?   @map("janela_exclusividade_fim")
+  origemCanal            String      @map("origem_canal")
+  // EXTENSAO registrada (fora de ART-005 nuclear): campos opcionais de
+  // preferencia usados so pelo radar (US-022, RN-316) - nulos = sem
+  // preferencia informada, radar nao filtra por esse criterio.
+  finalidadeDesejada     ImovelFinalidade? @map("finalidade_desejada")
+  orcamentoMinimo        Decimal?          @db.Decimal(14, 2) @map("orcamento_minimo")
+  orcamentoMaximo        Decimal?          @db.Decimal(14, 2) @map("orcamento_maximo")
+  criadoEm               DateTime    @default(now()) @map("criado_em")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  unidade     Unidade  @relation(fields: [unidadeId], references: [id])
+  pessoa      Pessoa   @relation(fields: [pessoaId], references: [id])
+  responsavel Usuario? @relation("LeadResponsavel", fields: [responsavelUsuarioId], references: [id])
+
+  interacoes     InteracaoDeLead[]
+  oportunidades  Oportunidade[]
+  sugestoesRadar SugestaoRadar[]
+  transferenciasDeCarteira TransferenciaDeCarteira[]
+
+  @@index([tenantId])
+  @@index([tenantId, estado])
+  @@map("lead")
+}
+
+enum SugestaoRadarStatus {
+  ACEITA
+  RECUSADA
+}
+
+// EPIC-09, US-022 (ART-014) / RN-316 (ART-009): registro da decisao humana
+// sobre uma sugestao do radar lead-imovel. A lista de sugestoes em si e
+// computada sob demanda (ver RadarService.sugerir) - so vira registro aqui
+// quando o corretor aceita ou recusa explicitamente. O radar NUNCA cria
+// Oportunidade sozinho.
+model SugestaoRadar {
+  id        String              @id @default(uuid())
+  tenantId  String              @map("tenant_id")
+  leadId    String              @map("lead_id")
+  imovelId  String              @map("imovel_id")
+  status    SugestaoRadarStatus
+  usuarioId String              @map("usuario_id")
+  criadoEm  DateTime            @default(now()) @map("criado_em")
+
+  lead   Lead   @relation(fields: [leadId], references: [id])
+  imovel Imovel @relation(fields: [imovelId], references: [id])
+
+  @@unique([tenantId, leadId, imovelId])
+  @@index([tenantId])
+  @@map("sugestao_radar")
+}
+
+enum InteracaoTipo {
+  CONTATO
+  VISITA
+  PROPOSTA
+  NOTA
+  PAUSA
+}
+
+// ART-005, secao 3 - InteracaoDeLead. Tenant-scoped: Sim. Historico
+// append-only; garante que o lead nunca perde contexto na troca de
+// responsavel (criterio de saida da Fase 1 do roadmap).
+model InteracaoDeLead {
+  id          String        @id @default(uuid())
+  tenantId    String        @map("tenant_id")
+  leadId      String        @map("lead_id")
+  usuarioId   String        @map("usuario_id")
+  tipo        InteracaoTipo
+  qualificado Boolean       @default(false)
+  criadoEm    DateTime      @default(now()) @map("criado_em")
+
+  lead    Lead    @relation(fields: [leadId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([leadId])
+  @@map("interacao_de_lead")
+}
+
+// ART-009, secao 8.1 - estados de Oportunidade. Reativacao PERDIDA ->
+// QUALIFICACAO (motivo recuperavel, DEC-NEG-011) fica fora de escopo desta
+// fatia, mesma decisao ja tomada para Lead (EPIC-03).
+enum OportunidadeEstado {
+  QUALIFICACAO
+  VISITA_AGENDADA
+  VISITA_CONFIRMADA
+  VISITA_REALIZADA
+  PROPOSTA_ENVIADA
+  EM_CONTRAPROPOSTA
+  RESERVA
+  DOCUMENTACAO_CONCLUIDA
+  FECHADA
+  PERDIDA
+}
+
+// ART-005, secao 3 - Oportunidade. Tenant-scoped: Sim.
+// RN-301 (ART-009): vincula-se a exatamente um lead e um imovel.
+model Oportunidade {
+  id        String             @id @default(uuid())
+  tenantId  String             @map("tenant_id")
+  leadId    String             @map("lead_id")
+  imovelId  String             @map("imovel_id")
+  estado    OportunidadeEstado @default(QUALIFICACAO)
+  criadoEm  DateTime           @default(now()) @map("criado_em")
+
+  lead   Lead   @relation(fields: [leadId], references: [id])
+  imovel Imovel @relation(fields: [imovelId], references: [id])
+  visitas             Visita[]
+  propostas           Proposta[]
+  reservas            Reserva[]
+  itensChecklist      ChecklistDocumentoItem[]
+  comissoesCruzadas   ComissaoCruzadaAcionada[]
+
+  @@index([tenantId])
+  @@index([tenantId, estado])
+  @@map("oportunidade")
+}
+
+enum PropostaTipo {
+  INICIAL
+  CONTRAPROPOSTA
+}
+
+enum PropostaStatus {
+  ENVIADA
+  ACEITA
+  RECUSADA
+}
+
+// ART-005, secao 3 - Proposta. Tenant-scoped: Sim.
+// RN-305 (ART-009): valor e condicoes explicitos, nunca texto livre sem
+// estrutura. RN-306: contraproposta fora da faixa pre-autorizada exige
+// aprovador registrado.
+model Proposta {
+  id                 String         @id @default(uuid())
+  tenantId           String         @map("tenant_id")
+  oportunidadeId     String         @map("oportunidade_id")
+  tipo               PropostaTipo
+  valor              Decimal        @db.Decimal(14, 2)
+  condicoes          String
+  status             PropostaStatus @default(ENVIADA)
+  aprovadorUsuarioId String?        @map("aprovador_usuario_id")
+  criadoEm           DateTime       @default(now()) @map("criado_em")
+
+  oportunidade Oportunidade @relation(fields: [oportunidadeId], references: [id])
+  reservas     Reserva[]
+
+  @@index([tenantId])
+  @@index([oportunidadeId])
+  @@map("proposta")
+}
+
+enum ReservaEstado {
+  ATIVA
+  EXPIRADA
+  CONVERTIDA
+  CANCELADA
+}
+
+// ART-005, secao 3 - Reserva. Tenant-scoped: Sim.
+// RN-307 (ART-009): bloqueia avanco de outras oportunidades concorrentes
+// sobre o mesmo imovel (aplicado via Oportunidade.estado = RESERVA, ver
+// OportunidadesService). Esta entidade rastreia o prazo e a expiracao
+// (US-018, CA-002) separadamente do estado da propria oportunidade.
+model Reserva {
+  id             String        @id @default(uuid())
+  tenantId       String        @map("tenant_id")
+  oportunidadeId String        @map("oportunidade_id")
+  propostaId     String        @map("proposta_id")
+  estado         ReservaEstado @default(ATIVA)
+  expiraEm       DateTime      @map("expira_em")
+  criadoEm       DateTime      @default(now()) @map("criado_em")
+
+  oportunidade Oportunidade @relation(fields: [oportunidadeId], references: [id])
+  proposta     Proposta     @relation(fields: [propostaId], references: [id])
+
+  @@index([tenantId])
+  @@index([oportunidadeId])
+  @@map("reserva")
+}
+
+enum VisitaEstado {
+  AGENDADA
+  CONFIRMADA
+  REALIZADA
+  CANCELADA
+}
+
+enum VisitaResultado {
+  INTERESSADO
+  NAO_INTERESSADO
+  INTERESSADO_EM_OUTRO_IMOVEL
+  NAO_COMPARECEU
+}
+
+// ART-005, secao 3 - Visita. Tenant-scoped: Sim.
+// RN-303/RN-304 (ART-009): cancelamento/remarcacao nao apaga historico -
+// cada tentativa de agendamento e um registro novo, o anterior fica CANCELADA.
+model Visita {
+  id             String           @id @default(uuid())
+  tenantId       String           @map("tenant_id")
+  oportunidadeId String           @map("oportunidade_id")
+  dataHora       DateTime         @map("data_hora")
+  estado         VisitaEstado     @default(AGENDADA)
+  resultado      VisitaResultado?
+  criadoEm       DateTime         @default(now()) @map("criado_em")
+
+  oportunidade Oportunidade @relation(fields: [oportunidadeId], references: [id])
+
+  @@index([tenantId])
+  @@index([oportunidadeId])
+  @@map("visita")
+}
+
+// ART-005, secao 3 - ChecklistDocumentoItem (ChecklistDocumental). Tenant-scoped: Sim.
+// RN-308 (ART-009): lista inicial por finalidade do imovel e uma HIPOTESE DE
+// TRABALHO (ver ChecklistService) - lista definitiva depende de validacao
+// juridica, nao inventada aqui como definitiva.
+model ChecklistDocumentoItem {
+  id             String       @id @default(uuid())
+  tenantId       String       @map("tenant_id")
+  oportunidadeId String       @map("oportunidade_id")
+  descricao      String
+  obrigatorio    Boolean      @default(true)
+  concluido      Boolean      @default(false)
+  criadoEm       DateTime     @default(now()) @map("criado_em")
+
+  oportunidade Oportunidade @relation(fields: [oportunidadeId], references: [id])
+
+  @@index([tenantId])
+  @@index([oportunidadeId])
+  @@map("checklist_documento_item")
+}
+
+// ART-005, secao 3 - marcador de RN-309 (ART-009): registra que uma
+// oportunidade fechada exige calculo de comissao cruzada entre unidades,
+// SEM calcular o valor (depende de DEC-NEG-002, ainda pendente, e de um
+// motor de comissao que nao existe nesta fatia - ver ART-008 para o motor
+// financeiro de locacao, que e o mais proximo ja especificado).
+model ComissaoCruzadaAcionada {
+  id                          String   @id @default(uuid())
+  tenantId                    String   @map("tenant_id")
+  oportunidadeId              String   @map("oportunidade_id")
+  unidadeProprietariaImovelId String   @map("unidade_proprietaria_imovel_id")
+  unidadeResponsavelLeadId    String   @map("unidade_responsavel_lead_id")
+  criadoEm                    DateTime @default(now()) @map("criado_em")
+
+  oportunidade Oportunidade @relation(fields: [oportunidadeId], references: [id])
+
+  @@index([tenantId])
+  @@index([oportunidadeId])
+  @@map("comissao_cruzada_acionada")
+}
+
+// EXTENSAO REGISTRADA (fora de ART-005 nuclear): lembrete/follow-up manual
+// do usuario ("Tarefas" no menu). Sem escopo formal em nenhum artefato -
+// nasceu de uma decisao direta do usuario deste sistema (nao um requisito
+// de negocio documentado em ART-004/ART-009), por isso fica marcado como
+// extensao, nao como historia numerada do backlog (ART-014). Sempre pessoal
+// (dono = quem criou), nao compartilhado entre usuarios da unidade - nao ha
+// conceito de "atribuir tarefa a outro usuario" nesta fatia.
+model Tarefa {
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  usuarioId String    @map("usuario_id")
+  titulo    String
+  concluida Boolean   @default(false)
+  prazo     DateTime?
+  criadoEm  DateTime  @default(now()) @map("criado_em")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, usuarioId])
+  @@map("tarefa")
+}
+
+// Fecha a pendencia "sem refresh token" (README, "Pendencias conhecidas de
+// autenticacao"). tokenHash e SHA-256 do refresh token (nao bcrypt: o
+// refresh token e um segredo de alta entropia gerado por nos, nao uma senha
+// de usuario - nao precisa de custo computacional para resistir a
+// forca-bruta, so precisa nao ser reversivel se o banco vazar). Rotacionado
+// a cada uso (AuthService.refresh revoga o antigo e cria um novo) - reuso de
+// um token ja revogado e tratado como sinal de token roubado. Sem job de
+// limpeza de linhas expiradas/revogadas nesta fatia (SIMPLIFICACAO
+// REGISTRADA): a tabela cresce sem GC automatico, aceitavel no volume atual.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  usuarioId  String    @map("usuario_id")
+  tokenHash  String    @map("token_hash")
+  criadoEm   DateTime  @default(now()) @map("criado_em")
+  expiraEm   DateTime  @map("expira_em")
+  revogadoEm DateTime? @map("revogado_em")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, usuarioId, tokenHash])
+  @@map("refresh_token")
+}
+
+// ============================================================
+// Fase 2 - Locacao operacional (ART-010). Ver ART-015-backlog-
+// fase-2.md para o backlog completo (US-101 a US-114) e
+// sistema/README.md para o que foi implementado nesta fatia.
+// ============================================================
+
+enum ContratoDeAdministracaoStatus {
+  ATIVO
+  ENCERRADO
+}
+
+// ART-010, secao 12 - ContratoDeAdministracao. Tenant-scoped: Sim.
+// Base de RN-401 ("contrato de locacao sempre deriva de um contrato de
+// administracao ativo"). EXTENSAO REGISTRADA: ART-010 nao especifica se
+// este contrato e por imovel ou por portfolio do proprietario (so diz
+// "vincula Unidade e Pessoa"); implementado 1:1 por imovel (imovelId
+// obrigatorio, no maximo um ATIVO por imovel, checado em codigo em
+// ContratosAdministracaoService.criar) para tornar RN-401 mecanicamente
+// verificavel sem inferir titularidade por outro caminho (ex.: cruzar com
+// ImovelCoproprietario, que e multi-proprietario e nao e usado aqui).
+model ContratoDeAdministracao {
+  id                   String                        @id @default(uuid())
+  tenantId             String                        @map("tenant_id")
+  unidadeId            String                        @map("unidade_id")
+  imovelId             String                        @map("imovel_id")
+  proprietarioPessoaId String                        @map("proprietario_pessoa_id")
+  status               ContratoDeAdministracaoStatus @default(ATIVO)
+  criadoEm             DateTime                      @default(now()) @map("criado_em")
+
+  unidade      Unidade @relation(fields: [unidadeId], references: [id])
+  imovel       Imovel  @relation(fields: [imovelId], references: [id])
+  proprietario Pessoa  @relation(fields: [proprietarioPessoaId], references: [id])
+
+  contratosDeLocacao ContratoDeLocacao[]
+
+  @@index([tenantId])
+  @@index([tenantId, imovelId])
+  @@map("contrato_de_administracao")
+}
+
+// ART-010, secao 8.1 - 7 estados do ciclo de vida. Nesta fatia (US-102,
+// ART-015) so RASCUNHO e alcancavel via codigo - as transicoes (maquina de
+// estados completa, estilo OportunidadesService.moverEstagioTx) ficam para
+// US-106 em diante, quando Garantia/Vistoria existirem. Enum definido com
+// os 7 estados completos desde ja para nao exigir migration de enum depois.
+enum ContratoDeLocacaoEstado {
+  RASCUNHO
+  EM_ASSINATURA
+  AGUARDANDO_VISTORIA_ENTRADA
+  VIGENTE
+  EM_ENCERRAMENTO
+  EM_ENCERRAMENTO_ANTECIPADO
+  ENCERRADO
+}
+
+// DEC-NEG-015 (pendente): catalogo simplificado, hipotese de trabalho
+// (recomendacao tecnica sugere IGP-M ou IPCA como padrao-sugestao).
+enum IndiceReajuste {
+  IGPM
+  IPCA
+  OUTRO
+}
+
+// ART-010, secao 12 - ContratoDeLocacao. Tenant-scoped: Sim.
+// valorAluguel/diaVencimento/dataInicio/prazoMeses sao dados descritivos do
+// contrato (mesmo espirito de Imovel.valorAnunciado), nao uma regra de
+// calculo - nao dependem de nenhuma DEC-NEG pendente. FORA DE ESCOPO
+// (RN-201, ART-008/Fase 3): nenhum campo financeiro (ordem de calculo,
+// titularidade de encargos, regras de repasse) foi adicionado aqui - ART-008
+// referencia esta entidade externamente quando for implementado (Fase 3),
+// nao o contrario.
+model ContratoDeLocacao {
+  id                       String                  @id @default(uuid())
+  tenantId                 String                  @map("tenant_id")
+  contratoDeAdministracaoId String                 @map("contrato_de_administracao_id")
+  inquilinoPessoaId        String                  @map("inquilino_pessoa_id")
+  estado                   ContratoDeLocacaoEstado @default(RASCUNHO)
+  valorAluguel             Decimal                 @db.Decimal(12, 2) @map("valor_aluguel")
+  diaVencimento            Int                     @map("dia_vencimento")
+  indiceReajuste           IndiceReajuste          @map("indice_reajuste")
+  // RN-407: declaracao explicita, nunca assumida silenciosamente - por isso
+  // obrigatorio (sem default) desde a criacao, nao so antes da ativacao.
+  aceitaReajusteNegativo   Boolean                 @map("aceita_reajuste_negativo")
+  dataInicio               DateTime                @db.Date @map("data_inicio")
+  prazoMeses               Int                     @map("prazo_meses")
+  criadoEm                 DateTime                @default(now()) @map("criado_em")
+
+  contratoDeAdministracao ContratoDeAdministracao @relation(fields: [contratoDeAdministracaoId], references: [id])
+  inquilino               Pessoa                  @relation(fields: [inquilinoPessoaId], references: [id])
+  garantias               Garantia[]
+
+  @@index([tenantId])
+  @@index([tenantId, contratoDeAdministracaoId])
+  @@map("contrato_de_locacao")
+}
+
+// DEC-NEG-014 (pendente): catalogo simplificado, hipotese de trabalho
+// (recomendacao tecnica, Opcao C) - "catalogo central mantido pela matriz"
+// nao implementado como ConfiguracaoGlobal separada nesta fatia, so como
+// enum fixo.
+enum GarantiaTipo {
+  FIADOR
+  CAUCAO
+  SEGURO_FIANCA
+}
+
+// ART-010, secao 8.2 - 5 estados. EM_SUBSTITUICAO so existe na garantia
+// ANTIGA durante uma troca (RN-403) - a nova garantia nasce em EM_ANALISE
+// normalmente, com substituiGarantiaId apontando pra antiga.
+enum GarantiaEstado {
+  EM_ANALISE
+  ATIVA
+  EM_SUBSTITUICAO
+  EM_LIQUIDACAO
+  ENCERRADA
+}
+
+// ART-010, secao 12 - Garantia. Tenant-scoped: Sim.
+// RN-402: contrato so vira Vigente com garantia ATIVA (quando exigida) -
+// verificacao em si fica para US-106 (ativacao do contrato), ainda nao
+// implementada; aqui so o ciclo de vida da propria Garantia.
+// RN-403: troca nunca gera janela sem cobertura - GarantiasService.ativar
+// so encerra a garantia antiga (substituiGarantiaId) na MESMA transacao em
+// que ativa a nova, nunca antes.
+model Garantia {
+  id                  String         @id @default(uuid())
+  tenantId            String         @map("tenant_id")
+  contratoDeLocacaoId String         @map("contrato_de_locacao_id")
+  tipo                GarantiaTipo
+  estado              GarantiaEstado @default(EM_ANALISE)
+  // Obrigatorio quando tipo = FIADOR, nulo nos demais (validado em codigo,
+  // nao no banco - Prisma nao suporta CHECK condicional por campo aqui).
+  fiadorPessoaId      String?        @map("fiador_pessoa_id")
+  // Preenchido só quando esta garantia nasce de uma troca (RN-403) -
+  // aponta para a garantia que ela está substituindo.
+  substituiGarantiaId String?        @map("substitui_garantia_id")
+  criadoEm            DateTime       @default(now()) @map("criado_em")
+
+  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+  fiador            Pessoa?           @relation(fields: [fiadorPessoaId], references: [id])
+  substituiGarantia Garantia?         @relation("SubstituicaoDeGarantia", fields: [substituiGarantiaId], references: [id])
+  substituidaPor    Garantia[]        @relation("SubstituicaoDeGarantia")
+
+  @@index([tenantId])
+  @@index([tenantId, contratoDeLocacaoId])
+  @@map("garantia")
+}

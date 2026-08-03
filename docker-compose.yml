@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # Superusuario, usado apenas para rodar migrations (prisma migrate deploy).
+      # A aplicacao NUNCA deve se conectar como este usuario - donos/superusuarios
+      # ignoram Row-Level Security, o que anularia DEC-TEC-001. Ver db/init/.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crm_imobiliario
+    ports:
+      - "5432:5432"
+    volumes:
+      - crm_postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  crm_postgres_data:

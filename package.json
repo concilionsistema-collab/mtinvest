@@ -1,0 +1,19 @@
+{
+  "name": "crm-imobiliario",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CRM imobiliario multi-tenant - vendas e locacao. Implementacao do backlog em crm-imobiliario-projeto/artefatos/ART-014-backlog-fase-1.md",
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=packages/shared && npm run build --workspace=apps/api && npm run build --workspace=apps/web",
+    "typecheck": "npm run typecheck --workspace=packages/shared && npm run typecheck --workspace=apps/api && npm run typecheck --workspace=apps/web",
+    "test": "npm run test --workspace=apps/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
