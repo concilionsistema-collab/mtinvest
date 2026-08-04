@@ -725,6 +725,15 @@ model ContratoDeLocacao {
   // RN-407: declaracao explicita, nunca assumida silenciosamente - por isso
   // obrigatorio (sem default) desde a criacao, nao so antes da ativacao.
   aceitaReajusteNegativo   Boolean                 @map("aceita_reajuste_negativo")
+  // RN-402: "se o contrato exige garantia (conforme politica do
+  // proprietario/contrato)". CORRECAO REGISTRADA (2026-08-03): este campo
+  // deveria ter sido adicionado junto com o resto do contrato (US-102) - o
+  // texto de ART-015 ja citava "campo exigeGarantia ja existe" mas o campo
+  // nunca tinha sido criado de fato. Corrigido agora, junto com US-106
+  // (primeira vez que RN-402 e de fato verificado, na transicao pra
+  // VIGENTE). Obrigatorio (sem default), mesmo espirito de
+  // aceitaReajusteNegativo - nunca assumido silenciosamente.
+  exigeGarantia            Boolean                 @map("exige_garantia")
   dataInicio               DateTime                @db.Date @map("data_inicio")
   prazoMeses               Int                     @map("prazo_meses")
   criadoEm                 DateTime                @default(now()) @map("criado_em")
@@ -732,10 +741,54 @@ model ContratoDeLocacao {
   contratoDeAdministracao ContratoDeAdministracao @relation(fields: [contratoDeAdministracaoId], references: [id])
   inquilino               Pessoa                  @relation(fields: [inquilinoPessoaId], references: [id])
   garantias               Garantia[]
+  vistorias               Vistoria[]
 
   @@index([tenantId])
   @@index([tenantId, contratoDeAdministracaoId])
   @@map("contrato_de_locacao")
+}
+
+// ART-010, secao 8.3 - 5 estados. Nesta fatia (US-106) so o fluxo de
+// ENTRADA e implementado (AGENDADA -> REALIZADA aciona RN-404); a
+// contestacao (RN-405, CONFIRMADA/EM_CONTESTACAO/RETIFICADA) e especifica de
+// SAIDA e fica para US-107.
+enum VistoriaTipo {
+  ENTRADA
+  SAIDA
+}
+
+enum VistoriaEstado {
+  AGENDADA
+  REALIZADA
+  CONFIRMADA
+  EM_CONTESTACAO
+  RETIFICADA
+}
+
+// ART-010, secao 12 - Vistoria. Tenant-scoped: Sim.
+// RN-404: contrato so vira VIGENTE com vistoria de ENTRADA REALIZADA -
+// verificado em ContratosLocacaoService.moverEstagioTx (chamado de dentro de
+// VistoriasService.realizarLaudo, mesma transacao - mesmo padrao de
+// VisitasService acionando OportunidadesService.moverEstagioTx).
+// SIMPLIFICACAO REGISTRADA: "evidencias" e um campo de texto livre (URL/
+// descricao), sem upload de arquivo real nesta fatia.
+model Vistoria {
+  id                  String         @id @default(uuid())
+  tenantId            String         @map("tenant_id")
+  contratoDeLocacaoId String         @map("contrato_de_locacao_id")
+  tipo                VistoriaTipo
+  estado              VistoriaEstado @default(AGENDADA)
+  dataHora            DateTime       @map("data_hora")
+  laudo               String?
+  evidencias          String?
+  realizadaEm         DateTime?      @map("realizada_em")
+  criadoEm            DateTime       @default(now()) @map("criado_em")
+
+  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, contratoDeLocacaoId])
+  @@map("vistoria")
 }
 
 // DEC-NEG-014 (pendente): catalogo simplificado, hipotese de trabalho

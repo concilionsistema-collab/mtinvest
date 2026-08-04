@@ -6,10 +6,12 @@ import { ContratosLocacaoController } from './contratos-locacao.controller';
 import { ContratosLocacaoService } from './contratos-locacao.service';
 import { GarantiasController } from './garantias.controller';
 import { GarantiasService } from './garantias.service';
+import { VistoriasController } from './vistorias.controller';
+import { VistoriasService } from './vistorias.service';
 
 @Module({
   imports: [AuditoriaModule],
-  controllers: [ContratosAdministracaoController, ContratosLocacaoController, GarantiasController],
-  providers: [ContratosAdministracaoService, ContratosLocacaoService, GarantiasService],
+  controllers: [ContratosAdministracaoController, ContratosLocacaoController, GarantiasController, VistoriasController],
+  providers: [ContratosAdministracaoService, ContratosLocacaoService, GarantiasService, VistoriasService],
 })
 export class LocacaoModule {}

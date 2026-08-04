@@ -94,7 +94,17 @@ function Start-Api {
 
 function Start-Web {
   Write-SupervisorLog 'Iniciando portal do Concilion CRM...'
-  return Start-Process -FilePath $npmExecutable -ArgumentList @('run','dev','--workspace=apps/web') -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $runtimeDirectory 'web.stdout.log') -RedirectStandardError (Join-Path $runtimeDirectory 'web.stderr.log') -PassThru
+  $previousNextDistDir = $env:NEXT_DIST_DIR
+  $env:NEXT_DIST_DIR = '.next-dev'
+  try {
+    return Start-Process -FilePath $npmExecutable -ArgumentList @('run','dev','--workspace=apps/web') -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $runtimeDirectory 'web.stdout.log') -RedirectStandardError (Join-Path $runtimeDirectory 'web.stderr.log') -PassThru
+  } finally {
+    if ($null -eq $previousNextDistDir) {
+      Remove-Item Env:NEXT_DIST_DIR -ErrorAction SilentlyContinue
+    } else {
+      $env:NEXT_DIST_DIR = $previousNextDistDir
+    }
+  }
 }
 
 Write-SupervisorLog 'Supervisor do Concilion CRM iniciado.'

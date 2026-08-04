@@ -46,6 +46,8 @@ export interface ContratoDeLocacao {
   diaVencimento: number;
   indiceReajuste: IndiceReajuste;
   aceitaReajusteNegativo: boolean;
+  /** RN-402: se true, o contrato não vira VIGENTE sem uma Garantia ATIVA vinculada. */
+  exigeGarantia: boolean;
   dataInicio: string;
   prazoMeses: number;
   criadoEm: string;
@@ -58,6 +60,7 @@ export interface CriarContratoDeLocacaoInput {
   diaVencimento: number;
   indiceReajuste: IndiceReajuste;
   aceitaReajusteNegativo: boolean;
+  exigeGarantia: boolean;
   dataInicio: string;
   prazoMeses: number;
 }
@@ -86,4 +89,37 @@ export interface RegistrarGarantiaInput {
   tipo: GarantiaTipo;
   /** Obrigatório quando tipo = FIADOR, ignorado nos demais. */
   fiadorPessoaId?: string;
+}
+
+/**
+ * ART-010, seção 8.3 — 5 estados. Nesta fatia (US-106) só o fluxo de
+ * ENTRADA é implementado (AGENDADA → REALIZADA aciona RN-404); contestação
+ * (CONFIRMADA/EM_CONTESTACAO/RETIFICADA) é específica de SAIDA (US-107).
+ */
+export type VistoriaTipo = 'ENTRADA' | 'SAIDA';
+export type VistoriaEstado = 'AGENDADA' | 'REALIZADA' | 'CONFIRMADA' | 'EM_CONTESTACAO' | 'RETIFICADA';
+
+export interface Vistoria {
+  id: string;
+  tenantId: string;
+  contratoDeLocacaoId: string;
+  tipo: VistoriaTipo;
+  estado: VistoriaEstado;
+  dataHora: string;
+  laudo: string | null;
+  evidencias: string | null;
+  realizadaEm: string | null;
+  criadoEm: string;
+}
+
+export interface AgendarVistoriaInput {
+  contratoDeLocacaoId: string;
+  tipo: VistoriaTipo;
+  dataHora: string;
+}
+
+export interface RealizarLaudoVistoriaInput {
+  laudo: string;
+  /** Texto livre (URL/descrição) — sem upload de arquivo real nesta fatia. */
+  evidencias?: string;
 }

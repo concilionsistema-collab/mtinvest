@@ -27,6 +27,10 @@ export class CriarContratoDeLocacaoDto implements CriarContratoDeLocacaoInput {
   @IsBoolean()
   aceitaReajusteNegativo!: boolean;
 
+  // RN-402 (ART-010): idem - declaração explícita, nunca assumida.
+  @IsBoolean()
+  exigeGarantia!: boolean;
+
   @IsDateString()
   dataInicio!: string;
 
