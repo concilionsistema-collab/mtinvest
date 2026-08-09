@@ -127,4 +127,21 @@ describe('Auth (e2e)', () => {
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .expect(401);
   });
+
+  it('bloqueia a conta após 5 tentativas de senha errada, mesmo com a senha certa na 6a (fecha "sem rate limiting", README)', async () => {
+    const alvo = await criarUsuarioDeTeste(contexto, { email: 'auth-e2e-bloqueio@teste.com', senha: 'senha-forte-123' });
+
+    for (let i = 0; i < 5; i += 1) {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ tenantId: contexto.tenantId, email: alvo.email, senha: 'senha-errada' })
+        .expect(401);
+    }
+
+    // 6a tentativa, agora com a senha CERTA - ainda 401, porque a conta está bloqueada:
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ tenantId: contexto.tenantId, email: alvo.email, senha: alvo.senha })
+      .expect(401);
+  });
 });

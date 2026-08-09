@@ -6,6 +6,7 @@ import { Prisma, Usuario as UsuarioRecord } from '@prisma/client';
 import { LoginInput, LoginResultado, RefreshTokenInput, Usuario } from '@crm/shared';
 import { TenantPrismaService } from '../../common/tenant/tenant-prisma.service';
 import { JwtPayload } from '../../common/auth/jwt-payload.interface';
+import { LoginLockoutService } from './login-lockout.service';
 
 // Access token curto (antes 12h fixas, sem renovação - ver README,
 // "Pendências conhecidas de autenticação"): agora a sessão de fato dura
@@ -45,24 +46,37 @@ export class AuthService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly jwtService: JwtService,
+    private readonly loginLockout: LoginLockoutService,
   ) {}
 
   // US-002/US-003 (ART-014): mensagem de erro deliberadamente genérica em
   // todos os casos de falha (e-mail inexistente, senha errada, usuário sem
-  // senha cadastrada, usuário INATIVO/DESLIGADO) - simplificação registrada
-  // para não vazar se um e-mail existe ou o motivo exato da rejeição.
+  // senha cadastrada, usuário INATIVO/DESLIGADO, e agora também conta
+  // bloqueada por excesso de tentativas) - simplificação registrada para
+  // não vazar se um e-mail existe, o motivo exato da rejeição, ou mesmo se
+  // a conta está temporariamente bloqueada (isso também vazaria que o
+  // e-mail existe). Fecha a pendência "sem rate limiting" (README) - ver
+  // LoginLockoutService para o porquê disto ser bloqueio por conta, não só
+  // por IP (que já é coberto à parte, por ThrottlerModule em app.module.ts).
   async login(input: LoginInput): Promise<LoginResultado> {
+    if (this.loginLockout.estaBloqueado(input.tenantId, input.email)) {
+      throw new UnauthorizedException('E-mail ou senha inválidos, ou usuário sem acesso.');
+    }
+
     return this.tenantPrisma.run(input.tenantId, async (tx) => {
       const usuario = await tx.usuario.findFirst({ where: { tenantId: input.tenantId, email: input.email } });
       if (!usuario || !usuario.senhaHash || usuario.status !== 'ATIVO') {
+        this.loginLockout.registrarFalha(input.tenantId, input.email);
         throw new UnauthorizedException('E-mail ou senha inválidos, ou usuário sem acesso.');
       }
 
       const senhaValida = await bcrypt.compare(input.senha, usuario.senhaHash);
       if (!senhaValida) {
+        this.loginLockout.registrarFalha(input.tenantId, input.email);
         throw new UnauthorizedException('E-mail ou senha inválidos, ou usuário sem acesso.');
       }
 
+      this.loginLockout.limparFalhas(input.tenantId, input.email);
       const { accessToken, refreshToken } = await this.emitirTokens(tx, usuario);
       return { accessToken, refreshToken, usuario: paraUsuario(usuario) };
     });

@@ -22,6 +22,13 @@ function paraGarantia(registro: GarantiaRecord): Garantia {
 // ainda não é verificado em nenhum lugar - fica para US-106 (ativação do
 // contrato), quando a máquina de estados de ContratoDeLocacao for
 // implementada. Aqui só o ciclo de vida da própria Garantia.
+// CORREÇÃO DE SEGURANÇA REGISTRADA (revisão de 2026-08-08): todo método
+// aqui só checava tenantId, nunca unidadeId - qualquer usuário autenticado
+// do tenant podia ler/escrever garantias de um contrato de OUTRA unidade,
+// bastando saber o id. Corrigido escopando pela unidade do contrato de
+// administração (mesmo padrão já usado em ContratosLocacaoService.listar),
+// mesmo espírito do escopo de unidade já aplicado a leads/imóveis/
+// oportunidades/checklist/visitas/propostas/reservas (ver README).
 @Injectable()
 export class GarantiasService {
   constructor(
@@ -32,13 +39,16 @@ export class GarantiasService {
   async registrar(
     tenantId: string,
     atorUsuarioId: string,
+    unidadeId: string,
     contratoDeLocacaoId: string,
     input: RegistrarGarantiaInput,
   ): Promise<Garantia> {
     return this.tenantPrisma.run(tenantId, async (tx) => {
-      const contrato = await tx.contratoDeLocacao.findFirst({ where: { id: contratoDeLocacaoId, tenantId } });
+      const contrato = await tx.contratoDeLocacao.findFirst({
+        where: { id: contratoDeLocacaoId, tenantId, contratoDeAdministracao: { unidadeId } },
+      });
       if (!contrato) {
-        throw new NotFoundException('Contrato de locação não encontrado neste tenant.');
+        throw new NotFoundException('Contrato de locação não encontrado nesta unidade.');
       }
 
       const fiadorPessoaId = await this.validarFiador(tx, tenantId, input);
@@ -59,13 +69,16 @@ export class GarantiasService {
   async trocar(
     tenantId: string,
     atorUsuarioId: string,
+    unidadeId: string,
     contratoDeLocacaoId: string,
     input: RegistrarGarantiaInput,
   ): Promise<Garantia> {
     return this.tenantPrisma.run(tenantId, async (tx) => {
-      const contrato = await tx.contratoDeLocacao.findFirst({ where: { id: contratoDeLocacaoId, tenantId } });
+      const contrato = await tx.contratoDeLocacao.findFirst({
+        where: { id: contratoDeLocacaoId, tenantId, contratoDeAdministracao: { unidadeId } },
+      });
       if (!contrato) {
-        throw new NotFoundException('Contrato de locação não encontrado neste tenant.');
+        throw new NotFoundException('Contrato de locação não encontrado nesta unidade.');
       }
 
       const garantiaAtiva = await tx.garantia.findFirst({
@@ -102,11 +115,13 @@ export class GarantiasService {
   // garantia é substituta de outra (substituiGarantiaId preenchido), a
   // antiga é encerrada NA MESMA transação - nunca fica com as duas ativas
   // nem as duas encerradas (RN-403, CA-402: sem janela sem cobertura).
-  async ativar(tenantId: string, atorUsuarioId: string, garantiaId: string): Promise<Garantia> {
+  async ativar(tenantId: string, atorUsuarioId: string, unidadeId: string, garantiaId: string): Promise<Garantia> {
     return this.tenantPrisma.run(tenantId, async (tx) => {
-      const garantia = await tx.garantia.findFirst({ where: { id: garantiaId, tenantId } });
+      const garantia = await tx.garantia.findFirst({
+        where: { id: garantiaId, tenantId, contratoDeLocacao: { contratoDeAdministracao: { unidadeId } } },
+      });
       if (!garantia) {
-        throw new NotFoundException('Garantia não encontrada neste tenant.');
+        throw new NotFoundException('Garantia não encontrada nesta unidade.');
       }
       if (garantia.estado !== 'EM_ANALISE') {
         throw new BadRequestException('Só uma garantia em análise pode ser ativada.');
@@ -132,11 +147,13 @@ export class GarantiasService {
     });
   }
 
-  async listar(tenantId: string, contratoDeLocacaoId: string): Promise<Garantia[]> {
+  async listar(tenantId: string, unidadeId: string, contratoDeLocacaoId: string): Promise<Garantia[]> {
     return this.tenantPrisma.run(tenantId, async (tx) => {
-      const contrato = await tx.contratoDeLocacao.findFirst({ where: { id: contratoDeLocacaoId, tenantId } });
+      const contrato = await tx.contratoDeLocacao.findFirst({
+        where: { id: contratoDeLocacaoId, tenantId, contratoDeAdministracao: { unidadeId } },
+      });
       if (!contrato) {
-        throw new NotFoundException('Contrato de locação não encontrado neste tenant.');
+        throw new NotFoundException('Contrato de locação não encontrado nesta unidade.');
       }
       const registros = await tx.garantia.findMany({
         where: { tenantId, contratoDeLocacaoId },

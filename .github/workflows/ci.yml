@@ -1,0 +1,40 @@
+name: CI
+
+# Roda em todo push pra master e em toda pull request - mesma sequencia que
+# ja rodamos manualmente a cada mudanca (typecheck + suite completa +
+# build), so que agora automatica em vez de depender de alguem lembrar.
+#
+# NAO INCLUI test:integration/test:e2e (apps/api) de proposito: essas suites
+# precisam de DATABASE_URL/MIGRATE_DATABASE_URL reais (Supabase) e criam/
+# limpam dados de verdade no tenant - conectar CI a um banco real e uma
+# decisao separada (qual banco usar so pra CI, isolado do de desenvolvimento)
+# que ainda nao foi tomada. So a suite unitaria (Prisma mockado, sem rede)
+# roda aqui.
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Typecheck (shared, api, web)
+        run: npm run typecheck
+
+      - name: Suite de testes unitarios (apps/api)
+        run: npm run test
+
+      - name: Build (shared, api, web)
+        run: npm run build

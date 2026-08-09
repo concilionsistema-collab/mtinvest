@@ -5,6 +5,8 @@ import { TenantPrismaService } from '../../common/tenant/tenant-prisma.service';
 import { LeadsService } from '../leads/leads.service';
 import { ReservasService } from '../reservas/reservas.service';
 import { CarteirasService } from '../carteiras/carteiras.service';
+import { VistoriasService } from '../locacao/vistorias.service';
+import { ContratosLocacaoService } from '../locacao/contratos-locacao.service';
 
 /**
  * README, "Próximos passos sugeridos": troca dos agendadores "preguiçosos"
@@ -34,6 +36,8 @@ export class SchedulerService {
     private readonly leadsService: LeadsService,
     private readonly reservasService: ReservasService,
     private readonly carteirasService: CarteirasService,
+    private readonly vistoriasService: VistoriasService,
+    private readonly contratosLocacaoService: ContratosLocacaoService,
   ) {}
 
   // Cadência de 5 minutos - hipótese de trabalho (nenhum dos prazos que essa
@@ -53,6 +57,8 @@ export class SchedulerService {
           await this.leadsService.executarVarreduraAutomaticaTx(tx, tenant.id);
           await this.reservasService.executarVarreduraAutomaticaTx(tx, tenant.id);
           await this.carteirasService.executarVarreduraAutomaticaTx(tx, tenant.id);
+          await this.vistoriasService.executarVarreduraAutomaticaTx(tx, tenant.id);
+          await this.contratosLocacaoService.executarVarreduraAutomaticaTx(tx, tenant.id);
         });
       } catch (erro) {
         // Um tenant com falha (ex.: dado inconsistente) nao pode travar a

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<style>
+  body {
+    background: #0f151f;
+    color: white;
+    font-family: sans-serif;
+    padding: 50px;
+  }
+  
+  .funnel-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px; /* small gap between layers */
+    width: 600px;
+  }
+
+  .funnel-layer {
+    position: relative;
+    height: 80px;
+    width: var(--width);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    /* Basic 3D shading */
+    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0) 20%),
+                linear-gradient(90deg, 
+                  color-mix(in srgb, var(--color) 40%, black) 0%, 
+                  var(--color) 20%, 
+                  color-mix(in srgb, var(--color) 80%, white) 50%, 
+                  var(--color) 80%, 
+                  color-mix(in srgb, var(--color) 40%, black) 100%);
+    border-radius: 100px / 25px; /* This gives the oval top/bottom look */
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5), inset 0 2px 5px rgba(255,255,255,0.5), inset 0 -5px 15px rgba(0,0,0,0.5);
+  }
+
+  /* The top opening (inner ellipse) */
+  .funnel-layer::before {
+    content: '';
+    position: absolute;
+    top: -2px; /* adjust for top lip */
+    left: 0;
+    right: 0;
+    height: 25px; /* same as vertical border-radius */
+    border-radius: 50%;
+    background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(255,255,255,0.1) 100%),
+                color-mix(in srgb, var(--color) 70%, black);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-top: 2px solid rgba(255,255,255,0.6); /* shine on back rim */
+    border-bottom: 1px solid rgba(0,0,0,0.5); /* shadow on front inside rim */
+    z-index: 1;
+  }
+  
+  .funnel-content {
+    position: relative;
+    z-index: 2; /* above the hole */
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  }
+</style>
+</head>
+<body>
+  <div class="funnel-container">
+    <div class="funnel-layer" style="--width: 100%; --color: #0b50bd; z-index: 6;">
+      <div class="funnel-content">
+        <span>Novos Leads</span>
+        <span>100%</span>
+      </div>
+    </div>
+    <div class="funnel-layer" style="--width: 85%; --color: #0b70d4; z-index: 5;">
+      <div class="funnel-content">
+        <span>Qualificados</span>
+        <span>70%</span>
+      </div>
+    </div>
+    <div class="funnel-layer" style="--width: 70%; --color: #0bd4bd; z-index: 4;">
+      <div class="funnel-content">
+        <span>Visitas</span>
+        <span>39%</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

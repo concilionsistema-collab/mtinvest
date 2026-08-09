@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { LoginResultado } from '@crm/shared';
 import { Public } from '../../common/auth/public.decorator';
 import { LoginDto } from './dto/login.dto';
@@ -10,6 +11,11 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Mais restritivo que o default global (100/min, app.module.ts): freia um
+  // único IP martelando tentativas de login especificamente. O bloqueio por
+  // CONTA (LoginLockoutService, dentro de AuthService) é a defesa real
+  // contra força bruta - este limite por IP é só a primeira camada.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)

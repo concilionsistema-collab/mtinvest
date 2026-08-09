@@ -15,6 +15,7 @@ const PONTOS = [
   { lng: -56.0930, lat: -13.8470, label: '5', status: 'negociacao', titulo: 'Setor Oeste', imovel: 'Casa Jardim', preco: 'R$ 980.000', foto: 1 },
   { lng: -56.0750, lat: -13.8495, label: '7', status: 'disponivel', titulo: 'Setor Sul', imovel: 'Sobrado Florais', preco: 'R$ 1.690.000', foto: 2 },
   { lng: -56.0820, lat: -13.8580, label: '10', status: 'vendido', titulo: 'Expansão Urbana', imovel: 'Galpão Comercial', preco: 'R$ 1.100.000', foto: 3 },
+  { lng: -56.0790, lat: -13.8420, label: '3', status: 'alugado', titulo: 'Setor Comercial', imovel: 'Sala Comercial', preco: 'R$ 3.500/mês', foto: 2 },
 ] as const;
 
 const IMOVEIS_NO_MAPA = [
@@ -22,13 +23,30 @@ const IMOVEIS_NO_MAPA = [
   { posicao: 'inferior-esquerda', lng: -56.0915, lat: -13.8280, titulo: 'Residencial Nova Mutum', preco: 'R$ 2.800.000', detalhes: '320m² · 4 suítes', status: 'Em negociação', foto: 2 },
   { posicao: 'superior-direita', lng: -56.0736, lat: -13.8310, titulo: 'Comercial Av. Mutum', preco: 'R$ 850.000', detalhes: '180m² · térreo', status: 'Disponível', foto: 3 },
   { posicao: 'inferior-direita', lng: -56.0930, lat: -13.8470, titulo: 'Casa Jardim', preco: 'R$ 980.000', detalhes: '195m² · 3 quartos', status: 'Em negociação', foto: 1 },
+  { posicao: 'superior-direita', lng: -56.0790, lat: -13.8420, titulo: 'Sala Comercial', preco: 'R$ 3.500/mês', detalhes: '45m² · mobiliado', status: 'Alugado', foto: 2 },
 ] as const;
 
 export function MapLibreSalesMap({ appearance = 'satellite' }: { appearance?: 'satellite' | 'dark' }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const fullScreenRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const marcadoresRef = useRef<Array<{ marker: maplibregl.Marker, status: string }>>([]);
   const [erro, setErro] = useState(false);
   const [modo3d, setModo3d] = useState(false);
+  const [filtroAtual, setFiltroAtual] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const getCount = (s: string) => {
+    let count = 0;
+    PONTOS.forEach(p => { if (p.status === s) count += Number(p.label); });
+    IMOVEIS_NO_MAPA.forEach(i => {
+      let st = i.status.toLowerCase();
+      if (st === 'em negociação') st = 'negociacao';
+      if (st === 'disponível') st = 'disponivel';
+      if (st === s) count += 1;
+    });
+    return count;
+  };
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -145,7 +163,8 @@ export function MapLibreSalesMap({ appearance = 'satellite' }: { appearance?: 's
           .setLngLat([ponto.lng, ponto.lat])
           .setPopup(popup)
           .addTo(mapa);
-
+          
+        marcadoresRef.current.push({ marker: marcador, status: ponto.status });
       });
 
       const cartoesGeograficos: Array<{
@@ -196,6 +215,13 @@ export function MapLibreSalesMap({ appearance = 'satellite' }: { appearance?: 's
           .setLngLat([imovel.lng, imovel.lat])
           .addTo(mapa);
 
+        let s = imovel.status.toLowerCase();
+        if (s === 'em negociação') s = 'negociacao';
+        if (s === 'disponível') s = 'disponivel';
+        
+        // Push fake marker to ref for filtering (we hide the element)
+        marcadoresRef.current.push({ marker: { getElement: () => raiz } as any, status: s });
+        
         cartoesGeograficos.push({ cartao, lng: imovel.lng, lat: imovel.lat });
       });
 
@@ -223,9 +249,30 @@ export function MapLibreSalesMap({ appearance = 'satellite' }: { appearance?: 's
 
     return () => {
       mapRef.current = null;
+      marcadoresRef.current = [];
       mapa.remove();
     };
   }, [appearance]);
+
+  useEffect(() => {
+    const handleFullscreen = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      setTimeout(() => mapRef.current?.resize(), 100);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreen);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreen);
+  }, []);
+
+  useEffect(() => {
+    marcadoresRef.current.forEach(({ marker, status }) => {
+      const el = marker.getElement();
+      if (!filtroAtual) {
+        el.style.display = '';
+      } else {
+        el.style.display = status === filtroAtual ? '' : 'none';
+      }
+    });
+  }, [filtroAtual]);
 
   function definirPerspectiva(ativar3d: boolean) {
     const mapa = mapRef.current;
@@ -238,15 +285,40 @@ export function MapLibreSalesMap({ appearance = 'satellite' }: { appearance?: 's
     mapa.easeTo({ pitch: ativar3d ? 46 : 0, bearing: ativar3d ? -18 : 0, duration: 650 });
   }
 
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      fullScreenRef.current?.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
   return (
-    <div className="maplibre-wrap">
-      <div ref={containerRef} className="maplibre-map" aria-label={appearance === 'dark' ? 'Mapa escuro de imóveis por localização' : 'Mapa aéreo de imóveis com cobertura nacional e foco inicial em Nova Mutum'} />
+    <>
+      {appearance === 'satellite' && (
+        <div className="map-toolbar">
+          <small>Visualização dos imóveis e negociações por localização</small>
+          <div>
+            <button onClick={() => setFiltroAtual(null)}>Todos os imóveis⌄</button>
+            <span style={{ opacity: filtroAtual && filtroAtual !== 'disponivel' ? 0.3 : 1, cursor: 'pointer', transition: 'opacity 0.2s' }} onClick={() => setFiltroAtual(f => f === 'disponivel' ? null : 'disponivel')}>○ Disponível ({getCount('disponivel')})</span>
+            <span style={{ opacity: filtroAtual && filtroAtual !== 'negociacao' ? 0.3 : 1, cursor: 'pointer', transition: 'opacity 0.2s' }} onClick={() => setFiltroAtual(f => f === 'negociacao' ? null : 'negociacao')}>○ Em negociação ({getCount('negociacao')})</span>
+            <span style={{ opacity: filtroAtual && filtroAtual !== 'vendido' ? 0.3 : 1, cursor: 'pointer', transition: 'opacity 0.2s' }} onClick={() => setFiltroAtual(f => f === 'vendido' ? null : 'vendido')}>○ Vendido ({getCount('vendido')})</span>
+            <span style={{ opacity: filtroAtual && filtroAtual !== 'alugado' ? 0.3 : 1, cursor: 'pointer', transition: 'opacity 0.2s' }} onClick={() => setFiltroAtual(f => f === 'alugado' ? null : 'alugado')}>○ Alugado ({getCount('alugado')})</span>
+          </div>
+        </div>
+      )}
+      <div className="map-stage" ref={fullScreenRef}>
+        <div className="maplibre-wrap">
+          <div ref={containerRef} className="maplibre-map" aria-label={appearance === 'dark' ? 'Mapa escuro de imóveis por localização' : 'Mapa aéreo de imóveis com cobertura nacional e foco inicial em Nova Mutum'} />
       {erro && <div className="maplibre-error">Não foi possível carregar os dados do mapa.</div>}
       {appearance === 'satellite' && <div className="maplibre-view-controls" aria-label="Perspectiva do mapa">
         <button type="button" className={!modo3d ? 'active' : ''} aria-pressed={!modo3d} onClick={() => definirPerspectiva(false)}>Aérea</button>
         <button type="button" className={modo3d ? 'active' : ''} aria-pressed={modo3d} onClick={() => definirPerspectiva(true)}>3D</button>
+        <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Sair da tela cheia' : 'Ver em tela cheia'}><span className="fluent" style={{ fontSize: '12px' }}>{isFullscreen ? '\uE73F' : '\uE740'}</span></button>
       </div>}
-      {appearance === 'satellite' && <div className="maplibre-brand"><span className="fluent">&#xE707;</span><b>ImobiCRM Maps</b><small>Imagem aérea contínua · cobertura nacional</small></div>}
-    </div>
+        {appearance === 'satellite' && <div className="maplibre-brand"><span className="fluent">&#xE707;</span><img src="/cionlaris-logo-transparent.png" alt="CIONLARIS Maps" style={{ height: '14px', margin: '2px 0 1px' }} /><small>Imagem aérea contínua · cobertura nacional</small></div>}
+        </div>
+      </div>
+    </>
   );
 }

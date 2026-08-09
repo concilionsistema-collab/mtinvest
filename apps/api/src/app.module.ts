@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { TenantModule } from './common/tenant/tenant.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -20,6 +22,7 @@ import { CarteirasModule } from './modules/carteiras/carteiras.module';
 import { TarefasModule } from './modules/tarefas/tarefas.module';
 import { LocacaoModule } from './modules/locacao/locacao.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -28,6 +31,14 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
     // Ativa os decorators @Cron/@Interval em toda a aplicacao (SchedulerModule) -
     // sem isso, @Cron e so metadado, nunca dispara.
     ScheduleModule.forRoot(),
+    // Protecao volumetrica generica por IP em toda a API (100 req/min) -
+    // fecha parte da pendencia "sem rate limiting" (README). Complementa,
+    // nao substitui, o bloqueio por conta em LoginLockoutService
+    // (AuthService) - throttling por IP so freia um unico IP martelando a
+    // API; um ataque de forca bruta contra UMA conta especifica rodando de
+    // varios IPs precisa do bloqueio por conta, que e a defesa de verdade
+    // pra isso (ver auth.module.ts).
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     // AuthModule registra o JwtAuthGuard como guard global (US-002/US-003) -
     // substitui o antigo TenantMiddleware. Precisa vir antes dos demais
     // apenas por legibilidade; a ordem de import nao afeta o registro do
@@ -50,6 +61,8 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
     TarefasModule,
     LocacaoModule,
     SchedulerModule,
+    HealthModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

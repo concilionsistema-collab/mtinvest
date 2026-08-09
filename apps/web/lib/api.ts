@@ -47,13 +47,17 @@ async function renovarSessao(): Promise<string | null> {
 }
 
 function requisitar(path: string, init: RequestInit | undefined, token: string | null): Promise<Response> {
+  const isFormData = typeof window !== 'undefined' && init?.body instanceof FormData;
+  const headers: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(init?.headers as Record<string, string> || {}),
+  };
+  if (!isFormData && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
   return fetch(`${API_URL}${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
+    headers,
   });
 }
 

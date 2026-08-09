@@ -122,5 +122,18 @@ html[data-theme] .maplibre-view-controls button.active{background:var(--primary)
 [data-theme="corporate-light"] .maplibregl-canvas{filter:saturate(.72) contrast(1.03) brightness(.94)}
 [data-theme="corporate-light"] .avatar{color:#172033}
 
+/* Os cards do painel preservam o relevo e acompanham a cor de fundo de cada tema. */
+html[data-theme] .metric{border-color:color-mix(in srgb,var(--metric-accent) 16%,var(--border));background:radial-gradient(circle at 50% 8%,color-mix(in srgb,var(--metric-accent) 8%,transparent),transparent 42%),linear-gradient(145deg,color-mix(in srgb,var(--bg-card-elevated) 52%,var(--bg-card)),var(--bg-card) 68%);color:var(--text-primary);box-shadow:inset 0 1px color-mix(in srgb,#fff 8%,transparent),0 18px 42px color-mix(in srgb,#000 27%,transparent)}
+html[data-theme] .metric:hover{border-color:color-mix(in srgb,var(--metric-accent) 42%,var(--border));background:radial-gradient(circle at 50% 8%,color-mix(in srgb,var(--metric-accent) 11%,transparent),transparent 44%),linear-gradient(145deg,color-mix(in srgb,var(--bg-card-elevated) 66%,var(--bg-card)),var(--bg-card) 70%);box-shadow:inset 0 1px color-mix(in srgb,#fff 10%,transparent),0 22px 48px color-mix(in srgb,#000 32%,transparent),0 0 22px color-mix(in srgb,var(--metric-accent) 10%,transparent)}
+html[data-theme] .metric-icon{background:transparent;color:inherit;box-shadow:none;text-shadow:none}
+html[data-theme] .metric-copy small{color:var(--text-secondary)}
+html[data-theme] .metric-copy strong{color:var(--text-primary)}
+html[data-theme] .metric-trend{border-color:color-mix(in srgb,var(--metric-accent) 12%,var(--border));background:color-mix(in srgb,var(--bg-card) 82%,transparent);color:var(--text-secondary)}
+html[data-theme] .metric-trend__value{color:var(--metric-accent)}
+[data-theme="corporate-light"] .metric{box-shadow:inset 0 1px #fff,0 14px 34px rgba(39,52,73,.11)}
+[data-theme="corporate-light"] .metric:after{background:linear-gradient(125deg,rgba(255,255,255,.74),transparent 31%),radial-gradient(circle at 50% 120%,rgba(39,52,73,.08),transparent 54%)}
+[data-theme="corporate-light"] .metric-copy strong{text-shadow:none}
+[data-theme="corporate-light"] .metric-trend{background:color-mix(in srgb,var(--bg-card-elevated) 72%,#fff);box-shadow:inset 0 1px #fff}
+
 @media(max-width:1100px){.theme-selector{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.appearance-settings{padding:14px}.appearance-settings__head{flex-direction:column}.theme-selector{grid-template-columns:1fr}}

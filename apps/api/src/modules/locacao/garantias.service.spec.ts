@@ -6,6 +6,7 @@ import { AuditoriaService } from '../auditoria/auditoria.service';
 // Cobre US-104/US-105 (ART-015-backlog-fase-2.md) / RN-402, RN-403 (ART-010).
 describe('GarantiasService', () => {
   const tenantId = 'tenant-1';
+  const unidadeId = 'un-A';
 
   function criarServicoComTx(tx: {
     contratoDeLocacaoFindFirst?: jest.Mock;
@@ -56,7 +57,7 @@ describe('GarantiasService', () => {
       const garantiaCreate = jest.fn().mockResolvedValue(garantiaCaucaoRecord);
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst, garantiaCreate });
 
-      const resultado = await service.registrar(tenantId, 'usr1', 'cl1', { tipo: 'CAUCAO' });
+      const resultado = await service.registrar(tenantId, 'usr1', unidadeId, 'cl1', { tipo: 'CAUCAO' });
 
       expect(garantiaCreate).toHaveBeenCalledWith({
         data: { tenantId, contratoDeLocacaoId: 'cl1', tipo: 'CAUCAO', fiadorPessoaId: null },
@@ -70,7 +71,7 @@ describe('GarantiasService', () => {
       const garantiaCreate = jest.fn().mockResolvedValue({ ...garantiaCaucaoRecord, tipo: 'FIADOR', fiadorPessoaId: 'pe-fiador' });
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst, pessoaFindFirst, garantiaCreate });
 
-      await service.registrar(tenantId, 'usr1', 'cl1', { tipo: 'FIADOR', fiadorPessoaId: 'pe-fiador' });
+      await service.registrar(tenantId, 'usr1', unidadeId, 'cl1', { tipo: 'FIADOR', fiadorPessoaId: 'pe-fiador' });
 
       expect(garantiaCreate).toHaveBeenCalledWith({
         data: { tenantId, contratoDeLocacaoId: 'cl1', tipo: 'FIADOR', fiadorPessoaId: 'pe-fiador' },
@@ -82,7 +83,7 @@ describe('GarantiasService', () => {
       const garantiaCreate = jest.fn();
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst, garantiaCreate });
 
-      await expect(service.registrar(tenantId, 'usr1', 'cl1', { tipo: 'FIADOR' })).rejects.toBeInstanceOf(
+      await expect(service.registrar(tenantId, 'usr1', unidadeId, 'cl1', { tipo: 'FIADOR' })).rejects.toBeInstanceOf(
         BadRequestException,
       );
       expect(garantiaCreate).not.toHaveBeenCalled();
@@ -94,7 +95,7 @@ describe('GarantiasService', () => {
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst, garantiaCreate });
 
       await expect(
-        service.registrar(tenantId, 'usr1', 'cl1', { tipo: 'CAUCAO', fiadorPessoaId: 'pe1' }),
+        service.registrar(tenantId, 'usr1', unidadeId, 'cl1', { tipo: 'CAUCAO', fiadorPessoaId: 'pe1' }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(garantiaCreate).not.toHaveBeenCalled();
     });
@@ -103,9 +104,26 @@ describe('GarantiasService', () => {
       const contratoDeLocacaoFindFirst = jest.fn().mockResolvedValue(null);
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst });
 
-      await expect(service.registrar(tenantId, 'usr1', 'cl-outro-tenant', { tipo: 'CAUCAO' })).rejects.toBeInstanceOf(
+      await expect(service.registrar(tenantId, 'usr1', unidadeId, 'cl-outro-tenant', { tipo: 'CAUCAO' })).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+
+    it('CORREÇÃO DE SEGURANÇA: escopa a busca do contrato pela unidade do chamador (nunca só tenantId)', async () => {
+      // Simula o comportamento real do Prisma/RLS: um contrato de OUTRA
+      // unidade não deveria "aparecer" para este chamador - o mock só
+      // resolve quando o where clause bate exatamente com a unidade certa.
+      const contratoDeLocacaoFindFirst = jest.fn((args) =>
+        args.where.contratoDeAdministracao?.unidadeId === unidadeId ? Promise.resolve(contratoBase) : Promise.resolve(null),
+      );
+      const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst });
+
+      await expect(
+        service.registrar(tenantId, 'usr1', 'un-DE-OUTRA-UNIDADE', 'cl1', { tipo: 'CAUCAO' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(contratoDeLocacaoFindFirst).toHaveBeenCalledWith({
+        where: { id: 'cl1', tenantId, contratoDeAdministracao: { unidadeId: 'un-DE-OUTRA-UNIDADE' } },
+      });
     });
   });
 
@@ -124,7 +142,7 @@ describe('GarantiasService', () => {
         garantiaUpdate,
       });
 
-      const resultado = await service.trocar(tenantId, 'usr1', 'cl1', { tipo: 'CAUCAO' });
+      const resultado = await service.trocar(tenantId, 'usr1', unidadeId, 'cl1', { tipo: 'CAUCAO' });
 
       expect(garantiaCreate).toHaveBeenCalledWith({
         data: { tenantId, contratoDeLocacaoId: 'cl1', tipo: 'CAUCAO', fiadorPessoaId: null, substituiGarantiaId: 'g-antiga' },
@@ -141,7 +159,7 @@ describe('GarantiasService', () => {
       const garantiaCreate = jest.fn();
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst, garantiaFindFirst, garantiaCreate });
 
-      await expect(service.trocar(tenantId, 'usr1', 'cl1', { tipo: 'CAUCAO' })).rejects.toBeInstanceOf(
+      await expect(service.trocar(tenantId, 'usr1', unidadeId, 'cl1', { tipo: 'CAUCAO' })).rejects.toBeInstanceOf(
         BadRequestException,
       );
       expect(garantiaCreate).not.toHaveBeenCalled();
@@ -154,7 +172,7 @@ describe('GarantiasService', () => {
       const garantiaUpdate = jest.fn().mockResolvedValue({ ...garantiaCaucaoRecord, estado: 'ATIVA' });
       const { service } = criarServicoComTx({ garantiaFindFirst, garantiaUpdate });
 
-      const resultado = await service.ativar(tenantId, 'usr1', 'g1');
+      const resultado = await service.ativar(tenantId, 'usr1', unidadeId, 'g1');
 
       expect(garantiaUpdate).toHaveBeenCalledWith({ where: { id: 'g1' }, data: { estado: 'ATIVA' } });
       expect(garantiaUpdate).toHaveBeenCalledTimes(1);
@@ -166,7 +184,7 @@ describe('GarantiasService', () => {
       const garantiaUpdate = jest.fn().mockResolvedValue({ ...garantiaCaucaoRecord, id: 'g-nova', estado: 'ATIVA' });
       const { service } = criarServicoComTx({ garantiaFindFirst, garantiaUpdate });
 
-      await service.ativar(tenantId, 'usr1', 'g-nova');
+      await service.ativar(tenantId, 'usr1', unidadeId, 'g-nova');
 
       expect(garantiaUpdate).toHaveBeenCalledWith({ where: { id: 'g-nova' }, data: { estado: 'ATIVA' } });
       expect(garantiaUpdate).toHaveBeenCalledWith({ where: { id: 'g-antiga' }, data: { estado: 'ENCERRADA' } });
@@ -178,7 +196,7 @@ describe('GarantiasService', () => {
       const garantiaUpdate = jest.fn();
       const { service } = criarServicoComTx({ garantiaFindFirst, garantiaUpdate });
 
-      await expect(service.ativar(tenantId, 'usr1', 'g1')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.ativar(tenantId, 'usr1', unidadeId, 'g1')).rejects.toBeInstanceOf(BadRequestException);
       expect(garantiaUpdate).not.toHaveBeenCalled();
     });
 
@@ -186,7 +204,7 @@ describe('GarantiasService', () => {
       const garantiaFindFirst = jest.fn().mockResolvedValue(null);
       const { service } = criarServicoComTx({ garantiaFindFirst });
 
-      await expect(service.ativar(tenantId, 'usr1', 'g-de-outro-tenant')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.ativar(tenantId, 'usr1', unidadeId, 'g-de-outro-tenant')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -196,7 +214,7 @@ describe('GarantiasService', () => {
       const garantiaFindMany = jest.fn().mockResolvedValue([garantiaCaucaoRecord]);
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst, garantiaFindMany });
 
-      const resultado = await service.listar(tenantId, 'cl1');
+      const resultado = await service.listar(tenantId, unidadeId, 'cl1');
 
       expect(garantiaFindMany).toHaveBeenCalledWith({
         where: { tenantId, contratoDeLocacaoId: 'cl1' },
@@ -209,7 +227,7 @@ describe('GarantiasService', () => {
       const contratoDeLocacaoFindFirst = jest.fn().mockResolvedValue(null);
       const { service } = criarServicoComTx({ contratoDeLocacaoFindFirst });
 
-      await expect(service.listar(tenantId, 'cl-de-outro-tenant')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.listar(tenantId, unidadeId, 'cl-de-outro-tenant')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

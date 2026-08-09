@@ -14,4 +14,8 @@ export class CriarPessoaDto implements CriarPessoaInput {
   @IsOptional()
   @IsString()
   documentoNormalizado?: string;
+
+  @IsOptional()
+  @IsString()
+  telefoneNormalizado?: string;
 }

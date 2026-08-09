@@ -71,6 +71,7 @@ describe('ContratosLocacaoService', () => {
     exigeGarantia: false,
     dataInicio: new Date('2026-09-01T00:00:00.000Z'),
     prazoMeses: 30,
+    vencimentoAtual: new Date('2029-03-01T00:00:00.000Z'),
     criadoEm: new Date('2026-08-02T00:00:00.000Z'),
   };
 
@@ -101,6 +102,7 @@ describe('ContratosLocacaoService', () => {
           exigeGarantia: false,
           dataInicio: new Date('2026-09-01'),
           prazoMeses: 30,
+          vencimentoAtual: new Date('2029-03-01T00:00:00.000Z'),
         },
       });
       expect(resultado.estado).toBe('RASCUNHO');
@@ -300,6 +302,52 @@ describe('ContratosLocacaoService', () => {
       );
 
       expect(garantiaFindFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('executarVarreduraAutomaticaTx (RN-409/CA-404 - encerramento automatico por vencimento)', () => {
+    it('move para EM_ENCERRAMENTO contratos VIGENTE com vencimentoAtual no passado, com ator sistema (null)', async () => {
+      const vencido = { ...contratoLocacaoRecord, id: 'cl-vencido', estado: 'VIGENTE', vencimentoAtual: new Date('2020-01-01') };
+      const contratoDeLocacaoFindMany = jest.fn().mockResolvedValue([vencido]);
+      const contratoDeLocacaoFindFirst = jest.fn().mockResolvedValue(vencido);
+      const contratoDeLocacaoUpdate = jest.fn().mockResolvedValue({ ...vencido, estado: 'EM_ENCERRAMENTO' });
+      const registroDeAuditoriaCreate = jest.fn().mockResolvedValue({});
+      const { service } = criarServicoComTx({
+        contratoDeLocacaoFindMany,
+        contratoDeLocacaoFindFirst,
+        contratoDeLocacaoUpdate,
+        registroDeAuditoriaCreate,
+      });
+
+      const tx = {
+        contratoDeLocacao: { findMany: contratoDeLocacaoFindMany, findFirst: contratoDeLocacaoFindFirst, update: contratoDeLocacaoUpdate },
+        registroDeAuditoria: { create: registroDeAuditoriaCreate },
+      } as unknown as Parameters<ContratosLocacaoService['executarVarreduraAutomaticaTx']>[0];
+
+      await service.executarVarreduraAutomaticaTx(tx, tenantId);
+
+      expect(contratoDeLocacaoFindMany).toHaveBeenCalledWith({
+        where: { tenantId, estado: 'VIGENTE', vencimentoAtual: { lt: expect.any(Date) } },
+      });
+      expect(contratoDeLocacaoUpdate).toHaveBeenCalledWith({ where: { id: 'cl-vencido' }, data: { estado: 'EM_ENCERRAMENTO' } });
+      expect(registroDeAuditoriaCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ atorUsuarioId: null, acao: 'CONTRATO_LOCACAO_ESTADO_ALTERADO' }) }),
+      );
+    });
+
+    it('nao mexe em contratos VIGENTE cujo vencimentoAtual ainda nao chegou', async () => {
+      const contratoDeLocacaoFindMany = jest.fn().mockResolvedValue([]);
+      const contratoDeLocacaoUpdate = jest.fn();
+      const { service } = criarServicoComTx({ contratoDeLocacaoFindMany, contratoDeLocacaoUpdate });
+
+      const tx = {
+        contratoDeLocacao: { findMany: contratoDeLocacaoFindMany, update: contratoDeLocacaoUpdate },
+        registroDeAuditoria: { create: jest.fn() },
+      } as unknown as Parameters<ContratosLocacaoService['executarVarreduraAutomaticaTx']>[0];
+
+      await service.executarVarreduraAutomaticaTx(tx, tenantId);
+
+      expect(contratoDeLocacaoUpdate).not.toHaveBeenCalled();
     });
   });
 });

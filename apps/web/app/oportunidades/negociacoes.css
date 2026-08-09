@@ -14,3 +14,40 @@
 @media(max-width:1450px){.deals-kpis{grid-template-columns:repeat(4,minmax(145px,1fr))}.deals-primary-grid{grid-template-columns:minmax(0,1fr) 320px}.deals-kanban{grid-template-columns:repeat(6,150px)}.deals-analytics-grid{grid-template-columns:1fr 1.25fr 1fr}.deals-loss{grid-column:1/-1}.deals-table header select:nth-of-type(n+2){display:none}}
 @media(max-width:1100px){.deals-primary-grid{grid-template-columns:1fr}.deals-side{grid-template-columns:1fr 1fr;grid-template-rows:auto}.deals-analytics-grid{grid-template-columns:1fr 1fr}.deals-loss{grid-column:auto}.deals-table header select{display:none}}
 @media(max-width:720px){.deals-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.deals-side,.deals-analytics-grid{grid-template-columns:1fr}.deals-section-head>div button:nth-child(-n+3){display:none}.deals-table header label{width:auto;flex:1}.deals-table header>button{display:none}.deals-modal form{grid-template-columns:1fr}.deals-modal footer{grid-column:1}.deals-kpi--wide{grid-column:1/-1}}
+
+/* AI Refinements for Kanban and Deals */
+.stalled-metrics {
+  background: rgba(255, 60, 60, 0.1);
+  color: #ffaaaa;
+  border: 1px solid rgba(255, 60, 60, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+.deals-card.stalled-card {
+  border: 1px solid rgba(255, 60, 60, 0.4);
+  background: linear-gradient(to right, rgba(255, 60, 60, 0.05), transparent);
+}
+.hot-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: linear-gradient(135deg, #ff7a00, #ff004c);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 99px;
+  box-shadow: 0 4px 10px rgba(255, 0, 76, 0.4);
+  animation: pulse-hot 2s infinite;
+  z-index: 10;
+}
+@keyframes pulse-hot {
+  0% { transform: scale(1); box-shadow: 0 4px 10px rgba(255, 0, 76, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 4px 20px rgba(255, 0, 76, 0.6); }
+  100% { transform: scale(1); box-shadow: 0 4px 10px rgba(255, 0, 76, 0.4); }
+}

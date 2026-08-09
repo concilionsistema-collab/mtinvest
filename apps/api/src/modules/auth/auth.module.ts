@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { LoginLockoutService } from './login-lockout.service';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { AuthService } from './auth.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
+  providers: [AuthService, LoginLockoutService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
   exports: [JwtModule],
 })
 export class AuthModule {}

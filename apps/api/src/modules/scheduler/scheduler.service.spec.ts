@@ -4,6 +4,8 @@ import { TenantPrismaService } from '../../common/tenant/tenant-prisma.service';
 import { LeadsService } from '../leads/leads.service';
 import { ReservasService } from '../reservas/reservas.service';
 import { CarteirasService } from '../carteiras/carteiras.service';
+import { VistoriasService } from '../locacao/vistorias.service';
+import { ContratosLocacaoService } from '../locacao/contratos-locacao.service';
 
 // Cobre a troca dos agendadores "preguicosos" por um job real (README,
 // "Próximos passos sugeridos").
@@ -24,13 +26,15 @@ describe('SchedulerService', () => {
     const leadsService = { executarVarreduraAutomaticaTx: jest.fn().mockResolvedValue(undefined) } as unknown as LeadsService;
     const reservasService = { executarVarreduraAutomaticaTx: jest.fn().mockResolvedValue(undefined) } as unknown as ReservasService;
     const carteirasService = { executarVarreduraAutomaticaTx: jest.fn().mockResolvedValue(undefined) } as unknown as CarteirasService;
+    const vistoriasService = { executarVarreduraAutomaticaTx: jest.fn().mockResolvedValue(undefined) } as unknown as VistoriasService;
+    const contratosLocacaoService = { executarVarreduraAutomaticaTx: jest.fn().mockResolvedValue(undefined) } as unknown as ContratosLocacaoService;
 
-    const service = new SchedulerService(prisma, tenantPrisma, leadsService, reservasService, carteirasService);
-    return { service, tenantFindMany, tenantPrisma, leadsService, reservasService, carteirasService };
+    const service = new SchedulerService(prisma, tenantPrisma, leadsService, reservasService, carteirasService, vistoriasService, contratosLocacaoService);
+    return { service, tenantFindMany, tenantPrisma, leadsService, reservasService, carteirasService, vistoriasService, contratosLocacaoService };
   }
 
   it('varre todos os tenants ATIVO, um por vez, dentro do contexto RLS de cada um', async () => {
-    const { service, tenantFindMany, tenantPrisma, leadsService, reservasService, carteirasService } = criarServico([
+    const { service, tenantFindMany, tenantPrisma, leadsService, reservasService, carteirasService, vistoriasService, contratosLocacaoService } = criarServico([
       { id: 'tenant-a' },
       { id: 'tenant-b' },
     ]);
@@ -43,6 +47,8 @@ describe('SchedulerService', () => {
     expect(leadsService.executarVarreduraAutomaticaTx).toHaveBeenCalledTimes(2);
     expect(reservasService.executarVarreduraAutomaticaTx).toHaveBeenCalledTimes(2);
     expect(carteirasService.executarVarreduraAutomaticaTx).toHaveBeenCalledTimes(2);
+    expect(vistoriasService.executarVarreduraAutomaticaTx).toHaveBeenCalledTimes(2);
+    expect(contratosLocacaoService.executarVarreduraAutomaticaTx).toHaveBeenCalledTimes(2);
     expect(leadsService.executarVarreduraAutomaticaTx).toHaveBeenCalledWith(expect.anything(), 'tenant-a');
     expect(leadsService.executarVarreduraAutomaticaTx).toHaveBeenCalledWith(expect.anything(), 'tenant-b');
   });

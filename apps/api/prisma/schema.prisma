@@ -154,12 +154,22 @@ model Pessoa {
   documentoNormalizado  String?    @map("documento_normalizado")
   telefoneNormalizado   String?    @map("telefone_normalizado")
   criadoEm              DateTime   @default(now()) @map("criado_em")
+  // ART-012 (Seguranca e LGPD): "processo de atendimento a pedido de
+  // eliminacao" - preenchido quando PessoasService.solicitarEliminacao
+  // anonimiza o titular (nome/documento/telefone), nunca em DELETE fisico
+  // (FKs de Lead/ContratoDeAdministracao/ContratoDeLocacao/Garantia/
+  // ImovelCoproprietario apontam pra Pessoa com ON DELETE RESTRICT de
+  // proposito - apagar quebraria o historico contratual/financeiro que a
+  // propria LGPD, art. 16, permite guardar por obrigacao legal). Null =
+  // nunca anonimizado.
+  anonimizadoEm         DateTime?  @map("anonimizado_em")
 
   coproprietacoes ImovelCoproprietario[]
   leads           Lead[]
   contratosDeAdministracaoComoProprietario ContratoDeAdministracao[]
   contratosDeLocacaoComoInquilino          ContratoDeLocacao[]
   garantiasComoFiador                      Garantia[]
+  acessosPortal                            AcessoPortalContrato[]
 
   @@unique([tenantId, documentoNormalizado])
   @@unique([tenantId, telefoneNormalizado])
@@ -236,6 +246,7 @@ model Usuario {
   transferenciasDestino TransferenciaDeCarteira[] @relation("TransferenciaDestino")
   tarefas               Tarefa[]
   refreshTokens         RefreshToken[]
+  vistoriasRealizadas   Vistoria[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -736,22 +747,197 @@ model ContratoDeLocacao {
   exigeGarantia            Boolean                 @map("exige_garantia")
   dataInicio               DateTime                @db.Date @map("data_inicio")
   prazoMeses               Int                     @map("prazo_meses")
+  // US-109/RN-408: data de vencimento do periodo vigente do contrato.
+  // Calculada na criacao (dataInicio + prazoMeses) e estendida por cada
+  // Renovacao confirmada (RenovacoesService.confirmar) - sempre reflete o
+  // vencimento ATUAL; o historico de periodos anteriores fica preservado em
+  // Renovacao (RN-412), nao aqui (mesmo espirito de valorAluguel/Reajuste,
+  // US-108). SchedulerService varre contratos VIGENTE com vencimentoAtual
+  // no passado e move para EM_ENCERRAMENTO automaticamente (RN-409/CA-404).
+  vencimentoAtual          DateTime                @db.Date @map("vencimento_atual")
   criadoEm                 DateTime                @default(now()) @map("criado_em")
 
   contratoDeAdministracao ContratoDeAdministracao @relation(fields: [contratoDeAdministracaoId], references: [id])
   inquilino               Pessoa                  @relation(fields: [inquilinoPessoaId], references: [id])
   garantias               Garantia[]
   vistorias               Vistoria[]
+  reajustes               Reajuste[]
+  renovacoes              Renovacao[]
+  documentos              DocumentoDeContrato[]
+  acessosPortal           AcessoPortalContrato[]
+  encerramentosAntecipados EncerramentoAntecipado[]
 
   @@index([tenantId])
   @@index([tenantId, contratoDeAdministracaoId])
   @@map("contrato_de_locacao")
 }
 
-// ART-010, secao 8.3 - 5 estados. Nesta fatia (US-106) so o fluxo de
-// ENTRADA e implementado (AGENDADA -> REALIZADA aciona RN-404); a
-// contestacao (RN-405, CONFIRMADA/EM_CONTESTACAO/RETIFICADA) e especifica de
-// SAIDA e fica para US-107.
+// ART-010, secao 12 - EncerramentoAntecipado (US-111, RN-410/CA-405).
+// Tenant-scoped: Sim. DEC-NEG-017 (pendente, "Opcao C" - recomendacao
+// tecnica, "nao e afirmacao juridica"): multa = valorReferencia *
+// (mesesRestantes / mesesTotais), proporcional ao tempo restante.
+// BLOQUEIO DE PRODUCAO REGISTRADO (ART-010 secao 21, risco explicito):
+// "bloquear uso em producao real ate validacao juridica explicita, mesmo
+// que o desenho tecnico avance" - EncerramentoAntecipadoService.solicitar
+// recusa QUALQUER chamada, mesmo de GESTOR_UNIDADE, a menos que a variavel
+// de ambiente LOCACAO_MULTA_RESCISORIA_HABILITADA esteja "true" (ausente/
+// false por padrao). Isto e um exercicio tecnico documentado, nao uma
+// funcionalidade liberada pra uso real.
+model EncerramentoAntecipado {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  contratoDeLocacaoId    String   @map("contrato_de_locacao_id")
+  // CORRECAO/EXTENSAO REGISTRADA: "valor de referencia definido no
+  // contrato" (DEC-NEG-017) nao tem campo proprio em ContratoDeLocacao -
+  // nenhum artefato define um separado de valorAluguel. Usa valorAluguel
+  // vigente no momento do encerramento (leitura mais direta, sem inventar
+  // um novo campo de parametrizacao).
+  valorReferencia        Decimal  @db.Decimal(12, 2) @map("valor_referencia")
+  mesesRestantes         Int      @map("meses_restantes")
+  mesesTotais            Int      @map("meses_totais")
+  percentualProporcional Decimal  @db.Decimal(5, 4) @map("percentual_proporcional")
+  valorMulta             Decimal  @db.Decimal(12, 2) @map("valor_multa")
+  isento                 Boolean  @default(false)
+  // RN-410: "isencao... exige apuracao formal registrada, nunca aplicada
+  // por decisao informal sem trilha" - obrigatorio quando isento=true,
+  // checado no service (nao so no DTO, pra nao depender so da validacao
+  // de entrada).
+  motivoIsencao          String?  @map("motivo_isencao")
+  confirmadoPorUsuarioId String   @map("confirmado_por_usuario_id")
+  criadoEm               DateTime @default(now()) @map("criado_em")
+
+  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, contratoDeLocacaoId])
+  @@map("encerramento_antecipado")
+}
+
+// ART-010, secao 12 - Renovacao (US-109/US-110, RN-408/RN-409/RN-412).
+// Tenant-scoped: Sim. Cada linha e um periodo de renovacao confirmado -
+// "vinculo ao periodo anterior e ao novo" (ART-010 §12), append-only, nunca
+// sobrescreve ContratoDeLocacao.vencimentoAtual sem deixar rastro de quem
+// era o vencimento antes.
+model Renovacao {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  contratoDeLocacaoId    String   @map("contrato_de_locacao_id")
+  prazoAdicionalMeses    Int      @map("prazo_adicional_meses")
+  vencimentoAnterior     DateTime @db.Date @map("vencimento_anterior")
+  novoVencimento         DateTime @db.Date @map("novo_vencimento")
+  confirmadoPorUsuarioId String   @map("confirmado_por_usuario_id")
+  criadoEm               DateTime @default(now()) @map("criado_em")
+
+  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, contratoDeLocacaoId])
+  @@map("renovacao")
+}
+
+// ART-010, secao 12 - DocumentoDeContrato (US-112, RN-411). Tenant-scoped: Sim.
+// SIMPLIFICACAO REGISTRADA: mesma decisao ja tomada pra Vistoria.evidencias -
+// "referencia" e texto livre (URL/descricao de onde o documento real esta
+// guardado), sem upload de arquivo, storage ou verificacao antimalware
+// nesta fatia (ART-012, secao "Armazenamento de documentos": "A definir",
+// URLs assinadas de curta duracao sao a decisao de producao futura, nao
+// implementada aqui). PENDENCIA (nao resolvida, nao escondida): periodo de
+// retencao pos-encerramento e DEC-NEG-018 (retencao e descarte de dados
+// pessoais) - ainda "Pendente" em ART-012, entao nenhum campo de expiracao/
+// descarte automatico foi adicionado aqui; documentos ficam visiveis
+// indefinidamente ate essa decisao ser tomada.
+enum DocumentoDeContratoTipo {
+  CONTRATO_ASSINADO
+  LAUDO_VISTORIA
+  COMPROVANTE_GARANTIA
+  TERMO_RENOVACAO
+  TERMO_RESCISAO
+  OUTRO
+}
+
+model DocumentoDeContrato {
+  id                   String                  @id @default(uuid())
+  tenantId             String                  @map("tenant_id")
+  contratoDeLocacaoId  String                  @map("contrato_de_locacao_id")
+  tipo                 DocumentoDeContratoTipo
+  descricao            String
+  referencia           String
+  anexadoPorUsuarioId  String                  @map("anexado_por_usuario_id")
+  criadoEm             DateTime                @default(now()) @map("criado_em")
+
+  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, contratoDeLocacaoId])
+  @@map("documento_de_contrato")
+}
+
+// ART-010, secao 12/17 - AcessoPortalContrato (US-113, RN-413). Tenant-scoped: Sim.
+// DECISAO TECNICA REGISTRADA (nenhum artefato especifica autenticacao de
+// Pessoa - proprietario/inquilino nunca fazem login como Usuario): portal e
+// acessado por um token opaco de alta entropia, gerado por um GESTOR_UNIDADE
+// e entregue fora da banda (nao ha envio de e-mail/SMS real nesta fatia).
+// Mesmo padrao ja usado pra RefreshToken - so o hash SHA-256 do token fica
+// no banco, nunca o valor puro (se o banco vazar, os tokens continuam
+// inuteis). O token, sozinho, JA determina o tenant e o contrato - nao existe
+// nenhum outro identificador na URL publica pra manipular (RN-413/ART-010
+// §17: "titular nunca acessa dado de outro contrato, mesmo por manipulacao
+// de identificador na URL").
+model AcessoPortalContrato {
+  id                  String    @id @default(uuid())
+  tenantId            String    @map("tenant_id")
+  contratoDeLocacaoId String    @map("contrato_de_locacao_id")
+  pessoaId            String    @map("pessoa_id")
+  tokenHash           String    @unique @map("token_hash")
+  criadoPorUsuarioId  String    @map("criado_por_usuario_id")
+  revogadoEm          DateTime? @map("revogado_em")
+  criadoEm            DateTime  @default(now()) @map("criado_em")
+
+  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+  pessoa            Pessoa            @relation(fields: [pessoaId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, contratoDeLocacaoId])
+  @@map("acesso_portal_contrato")
+}
+
+// ART-010, secao 12 - Reajuste (US-108, RN-406/RN-407). Tenant-scoped: Sim.
+// DEC-NEG-015 (pendente, "Opcao C" - recomendacao tecnica): valor do indice
+// capturado manualmente por competencia (fonte oficial/integracao e decisao
+// tecnica separada, fora de escopo aqui) e versionado - "competencia" e
+// unica por contrato (RN-406: "nunca recalculado retroativamente" - reaplicar
+// a mesma competencia e rejeitado, nao sobrescreve). "indice" e uma copia do
+// ContratoDeLocacao.indiceReajuste no momento da aplicacao (RN-406: "usa o
+// indice declarado no contrato", nao um indice escolhido livremente aqui).
+// RN-407 (piso zero/deflacao) resolvido em percentualAplicado - pode diferir
+// de percentualIndice quando o indice do periodo for negativo e o contrato
+// nao aceitar reajuste negativo (aceitaReajusteNegativo=false).
+model Reajuste {
+  id                   String         @id @default(uuid())
+  tenantId             String         @map("tenant_id")
+  contratoDeLocacaoId  String         @map("contrato_de_locacao_id")
+  competencia          String
+  indice               IndiceReajuste
+  percentualIndice     Decimal        @db.Decimal(7, 4) @map("percentual_indice")
+  percentualAplicado   Decimal        @db.Decimal(7, 4) @map("percentual_aplicado")
+  valorAluguelAnterior Decimal        @db.Decimal(12, 2) @map("valor_aluguel_anterior")
+  valorAluguelNovo     Decimal        @db.Decimal(12, 2) @map("valor_aluguel_novo")
+  criadoEm             DateTime       @default(now()) @map("criado_em")
+
+  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+
+  @@unique([tenantId, contratoDeLocacaoId, competencia])
+  @@index([tenantId])
+  @@index([tenantId, contratoDeLocacaoId])
+  @@map("reajuste")
+}
+
+// ART-010, secao 8.3 - 5 estados. US-106 implementou o fluxo de ENTRADA
+// (AGENDADA -> REALIZADA aciona RN-404); US-107 implementa a contestacao
+// (RN-405, CONFIRMADA/EM_CONTESTACAO/RETIFICADA), exclusiva de SAIDA -
+// EXTENSAO REGISTRADA: ART-010 so fala de contestacao no contexto da
+// vistoria de saida (secao 8.3, "ao final do contrato"), entao
+// VistoriasService rejeita tentativa de contestar uma vistoria de ENTRADA.
 enum VistoriaTipo {
   ENTRADA
   SAIDA
@@ -772,23 +958,62 @@ enum VistoriaEstado {
 // VisitasService acionando OportunidadesService.moverEstagioTx).
 // SIMPLIFICACAO REGISTRADA: "evidencias" e um campo de texto livre (URL/
 // descricao), sem upload de arquivo real nesta fatia.
+// CORRECAO REGISTRADA (US-107): "realizadoPorUsuarioId" nao existia ate
+// aqui - sem ele nao da pra checar RN-405/TEST-403 ("analista distinto do
+// autor original da vistoria"). "prazoContestacaoAte" implementa o prazo
+// formal de DEC-NEG-016 (hipotese de trabalho: 5 dias uteis a partir de
+// realizadaEm, so preenchido para vistoria de SAIDA).
 model Vistoria {
-  id                  String         @id @default(uuid())
-  tenantId            String         @map("tenant_id")
-  contratoDeLocacaoId String         @map("contrato_de_locacao_id")
-  tipo                VistoriaTipo
-  estado              VistoriaEstado @default(AGENDADA)
-  dataHora            DateTime       @map("data_hora")
-  laudo               String?
-  evidencias          String?
-  realizadaEm         DateTime?      @map("realizada_em")
-  criadoEm            DateTime       @default(now()) @map("criado_em")
+  id                     String         @id @default(uuid())
+  tenantId               String         @map("tenant_id")
+  contratoDeLocacaoId    String         @map("contrato_de_locacao_id")
+  tipo                   VistoriaTipo
+  estado                 VistoriaEstado @default(AGENDADA)
+  dataHora               DateTime       @map("data_hora")
+  laudo                  String?
+  evidencias             String?
+  realizadaEm            DateTime?      @map("realizada_em")
+  realizadoPorUsuarioId  String?        @map("realizado_por_usuario_id")
+  prazoContestacaoAte    DateTime?      @map("prazo_contestacao_ate")
+  criadoEm               DateTime       @default(now()) @map("criado_em")
 
-  contratoDeLocacao ContratoDeLocacao @relation(fields: [contratoDeLocacaoId], references: [id])
+  contratoDeLocacao ContratoDeLocacao       @relation(fields: [contratoDeLocacaoId], references: [id])
+  realizadoPor      Usuario?                @relation(fields: [realizadoPorUsuarioId], references: [id])
+  contestacoes      ContestacaoDeVistoria[]
 
   @@index([tenantId])
   @@index([tenantId, contratoDeLocacaoId])
   @@map("vistoria")
+}
+
+// ART-010, secao 12 - ContestacaoDeVistoria. Tenant-scoped: Sim.
+// RN-405/CA-403/TEST-403: "analistaUsuarioId" (quem decide) nunca pode ser
+// igual a "vistoria.realizadoPorUsuarioId" (quem fez o laudo original) -
+// checado em VistoriasService.decidirContestacao, nao no banco (Prisma nao
+// expressa essa comparacao entre tabelas como constraint).
+enum ContestacaoDecisao {
+  CONFIRMADA
+  RETIFICADA
+}
+
+model ContestacaoDeVistoria {
+  id                     String              @id @default(uuid())
+  tenantId               String              @map("tenant_id")
+  vistoriaId             String              @map("vistoria_id")
+  motivo                 String
+  evidencia              String?
+  contestadoPorUsuarioId String              @map("contestado_por_usuario_id")
+  analistaUsuarioId      String?             @map("analista_usuario_id")
+  decisao                ContestacaoDecisao?
+  justificativaDecisao   String?             @map("justificativa_decisao")
+  criadoEm               DateTime            @default(now()) @map("criado_em")
+  decididoEm             DateTime?           @map("decidido_em")
+
+  vistoria Vistoria @relation(fields: [vistoriaId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, vistoriaId])
+  @@map("contestacao_de_vistoria")
 }
 
 // DEC-NEG-014 (pendente): catalogo simplificado, hipotese de trabalho

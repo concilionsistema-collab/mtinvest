@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import { AuthService } from './auth.service';
 import { TenantPrismaService } from '../../common/tenant/tenant-prisma.service';
+import { LoginLockoutService } from './login-lockout.service';
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -20,13 +21,16 @@ function criarJwtServiceMock() {
   return { sign, verify } as unknown as JwtService;
 }
 
-function criarServico(tx: {
-  usuarioFindFirst?: jest.Mock;
-  refreshTokenCreate?: jest.Mock;
-  refreshTokenFindFirst?: jest.Mock;
-  refreshTokenUpdate?: jest.Mock;
-  refreshTokenUpdateMany?: jest.Mock;
-}) {
+function criarServico(
+  tx: {
+    usuarioFindFirst?: jest.Mock;
+    refreshTokenCreate?: jest.Mock;
+    refreshTokenFindFirst?: jest.Mock;
+    refreshTokenUpdate?: jest.Mock;
+    refreshTokenUpdateMany?: jest.Mock;
+  },
+  loginLockout: LoginLockoutService = new LoginLockoutService(),
+) {
   const tenantPrisma = {
     run: jest.fn((_tenantId: string, work: (tx: unknown) => unknown) =>
       work({
@@ -42,7 +46,7 @@ function criarServico(tx: {
   } as unknown as TenantPrismaService;
   const jwtService = criarJwtServiceMock();
 
-  return { service: new AuthService(tenantPrisma, jwtService), jwtService };
+  return { service: new AuthService(tenantPrisma, jwtService, loginLockout), jwtService, loginLockout };
 }
 
 const usuarioBase = {
@@ -126,6 +130,79 @@ describe('AuthService - login', () => {
     await expect(
       service.login({ tenantId, email: 'legado@crm.com', senha: 'qualquer' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+// Fecha a pendência "sem rate limiting" (README) do lado de bloqueio por conta.
+describe('AuthService - bloqueio por tentativas (LoginLockoutService)', () => {
+  const tenantId = 'tenant-1';
+
+  it('rejeita login mesmo com senha correta quando a conta está bloqueada', async () => {
+    const senhaHash = await bcrypt.hash('senha-correta', 4);
+    const usuarioFindFirst = jest.fn().mockResolvedValue({ ...usuarioBase, senhaHash });
+    const loginLockout = new LoginLockoutService();
+    for (let i = 0; i < 5; i += 1) {
+      loginLockout.registrarFalha(tenantId, 'teste@crm.com');
+    }
+    const { service } = criarServico({ usuarioFindFirst }, loginLockout);
+
+    await expect(
+      service.login({ tenantId, email: 'teste@crm.com', senha: 'senha-correta' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    // bloqueado ANTES de sequer consultar o usuario no banco:
+    expect(usuarioFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('registra falha ao errar a senha, e a 5a tentativa bloqueia as seguintes', async () => {
+    const senhaHash = await bcrypt.hash('senha-correta', 4);
+    const usuarioFindFirst = jest.fn().mockResolvedValue({ ...usuarioBase, senhaHash });
+    const loginLockout = new LoginLockoutService();
+    const { service } = criarServico({ usuarioFindFirst }, loginLockout);
+
+    for (let i = 0; i < 5; i += 1) {
+      await expect(
+        service.login({ tenantId, email: 'teste@crm.com', senha: 'senha-errada' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+
+    // a 6a tentativa (mesmo com senha CORRETA agora) e barrada pelo bloqueio, nao pela senha:
+    usuarioFindFirst.mockClear();
+    await expect(
+      service.login({ tenantId, email: 'teste@crm.com', senha: 'senha-correta' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(usuarioFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('login bem-sucedido limpa o contador de falhas anteriores', async () => {
+    const senhaHash = await bcrypt.hash('senha-correta', 4);
+    const usuarioFindFirst = jest.fn().mockResolvedValue({ ...usuarioBase, senhaHash });
+    const loginLockout = new LoginLockoutService();
+    const { service } = criarServico({ usuarioFindFirst }, loginLockout);
+
+    for (let i = 0; i < 4; i += 1) {
+      await expect(
+        service.login({ tenantId, email: 'teste@crm.com', senha: 'senha-errada' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    await expect(
+      service.login({ tenantId, email: 'teste@crm.com', senha: 'senha-correta' }),
+    ).resolves.toBeDefined();
+
+    expect(loginLockout.estaBloqueado(tenantId, 'teste@crm.com')).toBe(false);
+  });
+
+  it('tambem conta falha (e pode bloquear) para e-mail inexistente - nao vaza se a conta existe', async () => {
+    const usuarioFindFirst = jest.fn().mockResolvedValue(null);
+    const loginLockout = new LoginLockoutService();
+    const { service } = criarServico({ usuarioFindFirst }, loginLockout);
+
+    for (let i = 0; i < 5; i += 1) {
+      await expect(
+        service.login({ tenantId, email: 'fantasma@crm.com', senha: 'qualquer' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+
+    expect(loginLockout.estaBloqueado(tenantId, 'fantasma@crm.com')).toBe(true);
   });
 });
 

@@ -3,6 +3,11 @@ import { Usuario } from '@crm/shared';
 import { CurrentTenant } from '../../common/tenant/current-tenant.decorator';
 import { CurrentUsuario } from '../../common/auth/current-usuario.decorator';
 import { UsuarioAutenticado } from '../../common/auth/usuario-autenticado';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { UploadedFile, UseInterceptors, Res } from '@nestjs/common';
+import { Response } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AlterarSenhaDto } from './dto/alterar-senha.dto';
 import { CriarUsuarioDto } from './dto/criar-usuario.dto';
 import { UsuariosService } from './usuarios.service';
@@ -61,5 +66,36 @@ export class UsuariosController {
     @Param('id') id: string,
   ): Promise<Usuario> {
     return this.usuariosService.desligar(tenantId, id, ator.id);
+  }
+
+  @Post(':id/foto')
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.OK)
+  async uploadFoto(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+  ) {
+    if (!file) {
+      throw new Error('Nenhum arquivo enviado');
+    }
+    const uploadDir = path.join(process.cwd(), 'uploads', 'perfil');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const filename = `${id}.jpg`;
+    const filePath = path.join(uploadDir, filename);
+    fs.writeFileSync(filePath, file.buffer);
+    return { success: true, url: `/api/usuarios/${id}/foto` };
+  }
+
+  @Get(':id/foto')
+  async obterFoto(@Param('id') id: string, @Res() res: Response) {
+    const uploadDir = path.join(process.cwd(), 'uploads', 'perfil');
+    const filePath = path.join(uploadDir, `${id}.jpg`);
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(HttpStatus.NOT_FOUND).send('Foto não encontrada');
+    }
   }
 }

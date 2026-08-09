@@ -19,15 +19,16 @@ export class GarantiasController {
     @Param('contratoId') contratoId: string,
     @Body() dto: RegistrarGarantiaDto,
   ): Promise<Garantia> {
-    return this.garantiasService.registrar(tenantId, ator.id, contratoId, dto);
+    return this.garantiasService.registrar(tenantId, ator.id, ator.unidadeId, contratoId, dto);
   }
 
   @Get('contratos/:contratoId/garantias')
   listar(
     @CurrentTenant() tenantId: string,
+    @CurrentUsuario() ator: UsuarioAutenticado,
     @Param('contratoId') contratoId: string,
   ): Promise<Garantia[]> {
-    return this.garantiasService.listar(tenantId, contratoId);
+    return this.garantiasService.listar(tenantId, ator.unidadeId, contratoId);
   }
 
   @Post('contratos/:contratoId/garantias/troca')
@@ -38,7 +39,7 @@ export class GarantiasController {
     @Param('contratoId') contratoId: string,
     @Body() dto: RegistrarGarantiaDto,
   ): Promise<Garantia> {
-    return this.garantiasService.trocar(tenantId, ator.id, contratoId, dto);
+    return this.garantiasService.trocar(tenantId, ator.id, ator.unidadeId, contratoId, dto);
   }
 
   @Post('garantias/:id/ativar')
@@ -47,6 +48,6 @@ export class GarantiasController {
     @CurrentUsuario() ator: UsuarioAutenticado,
     @Param('id') id: string,
   ): Promise<Garantia> {
-    return this.garantiasService.ativar(tenantId, ator.id, id);
+    return this.garantiasService.ativar(tenantId, ator.id, ator.unidadeId, id);
   }
 }
