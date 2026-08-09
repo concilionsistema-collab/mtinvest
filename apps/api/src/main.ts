@@ -2,6 +2,7 @@ import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 const JWT_SECRET_PLACEHOLDER = 'troque-por-um-segredo-gerado-localmente';
@@ -48,6 +49,16 @@ async function bootstrap(): Promise<void> {
   // morre imediatamente, sem drenar requisicoes em andamento nem fechar a
   // pool de conexoes do Postgres.
   app.enableShutdownHooks();
+  // EXTENSAO REGISTRADA: nao especificado em nenhum artefato - recomendacao
+  // oficial do proprio guia de seguranca do NestJS
+  // (https://docs.nestjs.com/security/helmet). Cabecalhos HTTP de seguranca
+  // basicos (X-Content-Type-Options, Strict-Transport-Security etc.).
+  // crossOriginResourcePolicy explicitamente 'cross-origin': o default do
+  // helmet ('same-origin') bloquearia o proprio front-end de ler as
+  // respostas da API, ja que web (porta 3000) e api (porta 3001) sao
+  // origens diferentes - CORP e um header de protecao de recurso, aplicado
+  // pelo navegador independente do CORS ja configurado abaixo.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   // CORS restritivo (ART-012): so a origem do front-end local pode chamar a API.
   // TODO(prod): trocar por lista de origens vinda de configuracao antes do deploy real.
   app.enableCors({
