@@ -6,7 +6,8 @@ import type { Imovel, Lead, Oportunidade, Visita } from '@crm/shared';
 import { useAuth } from '../components/auth-context';
 import { apiFetch } from '../lib/api';
 import { MapLibreSalesMap } from '../components/maplibre-sales-map';
-import { PremiumSalesFunnel, PremiumSalesPerformance } from '../components/dashboard-sales-widgets';
+import { PremiumSalesPerformance } from '../components/dashboard-sales-widgets';
+import { SalesFunnelCard } from '../components/sales-funnel-card';
 import { AIInsightsPanel } from '../components/ai-insights-panel';
 
 const ESTADOS_OPORTUNIDADE_ENCERRADOS = ['FECHADA', 'PERDIDA'];
@@ -186,9 +187,9 @@ export default function DashboardPage() {
       <AIInsightsPanel />
 
       <div className="dashboard-row dashboard-row--top">
-        <Panel title="Funil de Vendas" className="funnel-panel">
-          <PremiumSalesFunnel />
-        </Panel>
+        <section className="funnel-showcase">
+          <SalesFunnelCard />
+        </section>
 
         <Panel title="Performance de Vendas" action="Este mês⌄" className="performance-panel">
           <PremiumSalesPerformance />

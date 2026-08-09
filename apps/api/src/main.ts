@@ -40,6 +40,14 @@ function validarVariaveisDeAmbiente(): void {
 async function bootstrap(): Promise<void> {
   validarVariaveisDeAmbiente();
   const app = await NestFactory.create(AppModule);
+  // EXTENSAO REGISTRADA: sem isto, os hooks OnModuleDestroy (inclusive
+  // PrismaService.onModuleDestroy -> $disconnect()) nunca disparam em SIGTERM/
+  // SIGINT - o Nest so os chama em app.close() explicito. Qualquer plataforma
+  // de hospedagem real (container, orquestrador) manda SIGTERM pra pedir
+  // desligamento gracioso antes de matar o processo; sem isto o processo
+  // morre imediatamente, sem drenar requisicoes em andamento nem fechar a
+  // pool de conexoes do Postgres.
+  app.enableShutdownHooks();
   // CORS restritivo (ART-012): so a origem do front-end local pode chamar a API.
   // TODO(prod): trocar por lista de origens vinda de configuracao antes do deploy real.
   app.enableCors({
