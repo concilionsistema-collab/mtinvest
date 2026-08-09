@@ -84,6 +84,43 @@ export function PremiumSalesFunnel() {
   );
 }
 
+export function CompactSalesFunnel() {
+  const nomes = ['Novos Leads', 'Qualificados', 'Visitas', 'Propostas', 'Negociação', 'Fechados'];
+  const larguras = [100, 92, 84, 76, 68, 60];
+
+  return (
+    <div className="compact-sales-funnel">
+      <div className="compact-sales-funnel__summary">
+        <span>Conversão total</span>
+        <b>2,2%</b>
+      </div>
+      <ol aria-label="Resumo do funil de vendas">
+        {ETAPAS_SVG.map((etapa, indice) => (
+          <li
+            key={etapa.id}
+            style={{
+              '--compact-color': etapa.midColor,
+              '--compact-base': etapa.baseColor,
+              '--compact-dark': etapa.sideColor,
+              '--compact-width': `${larguras[indice]}%`,
+            } as CSSProperties}
+          >
+            <span className="compact-sales-funnel__marker" aria-hidden="true">{etapa.id}</span>
+            <div className="compact-sales-funnel__layer">
+              <span className="compact-sales-funnel__icon" aria-hidden="true">{etapa.icone}</span>
+              <span className="compact-sales-funnel__copy">
+                <b>{nomes[indice]}</b>
+                <small>{etapa.valor} leads</small>
+              </span>
+              <strong>{etapa.percentual}</strong>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export function PremiumSalesPerformance() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [indiceAtivo, setIndiceAtivo] = useState(17);
