@@ -99,9 +99,6 @@ export function CompactSalesFunnel() {
           <li
             key={etapa.id}
             style={{
-              '--compact-color': etapa.midColor,
-              '--compact-base': etapa.baseColor,
-              '--compact-dark': etapa.sideColor,
               '--compact-width': `${larguras[indice]}%`,
             } as CSSProperties}
           >
