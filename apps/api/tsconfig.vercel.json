@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "baseUrl": "./",
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "dist/.typecheck-vercel.tsbuildinfo"
+  },
+  "include": ["src", "api"]
+}

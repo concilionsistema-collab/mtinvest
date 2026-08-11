@@ -7,7 +7,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit --tsBuildInfoFile dist/.typecheck.tsbuildinfo",
+    "typecheck": "tsc -p tsconfig.json --noEmit --tsBuildInfoFile dist/.typecheck.tsbuildinfo && tsc -p tsconfig.vercel.json",
     "test": "jest",
     "test:integration": "jest --config jest.integration.config.js",
     "test:e2e": "jest --config jest.e2e.config.js",
