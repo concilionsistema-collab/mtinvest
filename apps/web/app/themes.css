@@ -137,3 +137,9 @@ html[data-theme] .metric-trend__value{color:var(--metric-accent)}
 
 @media(max-width:1100px){.theme-selector{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.appearance-settings{padding:14px}.appearance-settings__head{flex-direction:column}.theme-selector{grid-template-columns:1fr}}
+
+/* O tema executivo preserva o contraste profundo da referência do pipeline. */
+html[data-theme="executive-dark"] .leads-page>.lead-pipeline{border-color:#24384b;background:radial-gradient(circle at 50% -20%,rgba(37,66,104,.13),transparent 40%),linear-gradient(180deg,#0b1623,#09131f)}
+html[data-theme="executive-dark"] .lead-kanban-column{border-color:#263b50;background:linear-gradient(180deg,rgba(17,31,45,.96),#0a1521)}
+html[data-theme="executive-dark"] .lead-kanban-card{border-color:#263a4d;background:radial-gradient(circle at 8% 50%,rgba(49,73,95,.16),transparent 38%),linear-gradient(145deg,#101d2b,#0b1622);box-shadow:0 4px 12px rgba(0,0,0,.14)}
+html[data-theme="executive-dark"] .lead-kanban-card:hover{border-color:color-mix(in srgb,var(--column) 54%,#304b63);background:radial-gradient(circle at 8% 50%,rgba(49,73,95,.22),transparent 40%),linear-gradient(145deg,#142536,#0d1b29);box-shadow:0 10px 24px rgba(0,0,0,.24)}

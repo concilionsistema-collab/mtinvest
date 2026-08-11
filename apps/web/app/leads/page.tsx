@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import type { CapturarLeadResultado, ImovelFinalidade, Lead, Unidade, Usuario } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
 import { apiFetch } from '../../lib/api';
@@ -14,7 +14,10 @@ const leadMetrics = [
   ['\uE73E', 'Convertidos (Mês)', '28', '27% vs mês anterior', 'purple'],
 ] as const;
 
-const pipelineColumns = [
+type PipelineCard = [name: string, interest: string, value: string, age: string, initials: string];
+type PipelineColumn = { title: string; count: number; total: string; tone: string; more: number; cards: PipelineCard[] };
+
+const pipelineColumns: PipelineColumn[] = [
   { title: 'Novo Lead', count: 286, total: 'R$ 1.245.000', tone: 'purple', more: 82, cards: [
     ['Carlos Alberto', 'Apartamento 2 dorm.', 'R$ 450.000', 'Hoje', 'CA'],
     ['Mariana Oliveira', 'Casa em condomínio', 'R$ 780.000', 'Hoje', 'MO'],
@@ -45,7 +48,7 @@ const pipelineColumns = [
     ['Simone Ribeiro', 'Casa em condomínio', 'R$ 1.250.000', '1d', 'SR'],
     ['Eduardo Freitas', 'Apartamento 3 dorm.', 'R$ 750.000', '2d', 'EF'],
   ]},
-] as const;
+];
 
 const leadSources = [
   ['Site / Portal', 38, 109, 'purple'], ['Indicação', 22, 63, 'blue'], ['Redes Sociais', 18, 52, 'cyan'], ['Campanhas', 12, 34, 'orange'], ['Outros', 10, 28, 'gold'],
@@ -75,7 +78,9 @@ const hotLeads = [
 ] as const;
 
 function LeadAvatar({ initials, index = 0 }: { initials: string; index?: number }) {
-  return <span className={`lead-avatar lead-avatar--${(index % 5) + 1}`}>{initials}</span>;
+  const avatarIndex = index % 20;
+  const backgroundPosition = `${(avatarIndex % 5) * 25}% ${Math.floor(avatarIndex / 5) * (100 / 3)}%`;
+  return <span className="lead-avatar" aria-hidden="true" title={initials} style={{ backgroundPosition } as CSSProperties} />;
 }
 
 export default function LeadsPage() {
@@ -88,6 +93,8 @@ export default function LeadsPage() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  const [pipeline, setPipeline] = useState<PipelineColumn[]>(() => pipelineColumns.map((column) => ({ ...column, cards: column.cards.map((card) => [...card]) as PipelineCard[] })));
+  const [leadArrastado, setLeadArrastado] = useState<string | null>(null);
   const [unidadeId, setUnidadeId] = useState('');
   const [nomeContato, setNomeContato] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -116,6 +123,26 @@ export default function LeadsPage() {
   }, []);
 
   const leadsFiltrados = useMemo(() => tableLeads.filter((lead) => `${lead.name} ${lead.source} ${lead.interest}`.toLowerCase().includes(busca.toLowerCase())), [busca]);
+
+  function moverLead(destino: number) {
+    if (!leadArrastado) return;
+    setPipeline((colunas) => {
+      const origem = colunas.findIndex((coluna) => coluna.cards.some((card) => card[0] === leadArrastado));
+      if (origem < 0 || origem === destino) return colunas;
+      const card = colunas[origem].cards.find((item) => item[0] === leadArrastado);
+      if (!card) return colunas;
+      return colunas.map((coluna, indice) => ({
+        ...coluna,
+        cards: indice === origem ? coluna.cards.filter((item) => item[0] !== leadArrastado) : indice === destino ? [...coluna.cards, card] : coluna.cards,
+      }));
+    });
+    setLeadArrastado(null);
+  }
+
+  function prepararDestino(evento: DragEvent<HTMLElement>) {
+    evento.preventDefault();
+    evento.dataTransfer.dropEffect = 'move';
+  }
 
   function fecharModal() {
     setModalAberto(false);
@@ -146,23 +173,30 @@ export default function LeadsPage() {
     <h1 className="sr-only">Leads</h1>
     {(aviso || erro) && <div className={`leads-toast ${erro ? 'leads-toast--error' : ''}`}>{erro ?? aviso}<button onClick={() => { setErro(null); setAviso(null); }}>×</button></div>}
 
+    <section className="leads-surface lead-pipeline" aria-labelledby="lead-pipeline-title">
+      <header className="leads-section-head"><div><h2 id="lead-pipeline-title">Pipeline de Leads <span>(Funil)</span></h2><small>Arraste os cartões entre as etapas para atualizar o status</small></div><div className="lead-pipeline-actions"><select aria-label="Selecionar funil"><option>Funil Padrão</option></select><button>⚙ Personalizar</button><button aria-label="Visualização em lista">☷</button><button className="active" aria-label="Visualização em colunas">▦</button></div></header>
+      <div className="lead-kanban">
+        {pipeline.map((column, columnIndex) => <article className={`lead-kanban-column lead-kanban-column--${column.tone}`} key={column.title} onDragOver={prepararDestino} onDrop={() => moverLead(columnIndex)}>
+          <header><b>{column.title}</b><div><span>{column.count + column.cards.length - 4} Leads</span><strong>{column.total}</strong></div></header>
+          <div className="lead-kanban-cards">{column.cards.map((card, cardIndex) => {
+            const originalColumn = pipelineColumns.findIndex((item) => item.cards.some((original) => original[0] === card[0]));
+            const originalCard = originalColumn < 0 ? cardIndex : pipelineColumns[originalColumn].cards.findIndex((item) => item[0] === card[0]);
+            const avatarIndex = originalColumn < 0 ? columnIndex * 4 + cardIndex : originalColumn * 4 + originalCard;
+            return <button className={`lead-kanban-card ${leadArrastado === card[0] ? 'lead-kanban-card--dragging' : ''}`} key={card[0]} draggable onDragStart={(evento) => { setLeadArrastado(card[0]); evento.dataTransfer.effectAllowed = 'move'; evento.dataTransfer.setData('text/plain', card[0]); }} onDragEnd={() => setLeadArrastado(null)} aria-label={`${card[0]}, ${card[1]}, ${card[2]}`}>
+              <LeadAvatar initials={card[4]} index={avatarIndex}/><span className="lead-card-copy"><span className="lead-card-name"><i>{card[4]}</i><b>{card[0]}</b></span><small>{card[1]}</small><footer><strong>{card[2]}</strong><time>{card[3]}</time></footer></span><i className="lead-card-status">{column.tone === 'green' ? '✓' : String.fromCharCode(65 + (cardIndex % 2))}</i>
+            </button>;
+          })}</div>
+          <button className="lead-kanban-more">＋ Ver mais {column.more} leads</button>
+        </article>)}
+      </div>
+    </section>
+
     <section className="lead-kpi-grid" aria-label="Indicadores de leads">
       {leadMetrics.map(([icon, label, value, delta, tone]) => <article className={`lead-kpi lead-kpi--${tone}`} key={label}><div><small>{label}</small><strong>{value}</strong><em>↗ {delta}</em></div><span className="lead-kpi__icon fluent">{icon}</span></article>)}
       <article className="lead-kpi lead-kpi--conversion"><div><small>Taxa de Conversão</small><strong>23%</strong><em>↗ 3 p.p. vs mês anterior</em></div><span className="lead-kpi__ring" /></article>
     </section>
 
-    <div className="leads-primary-grid">
-      <section className="leads-surface lead-pipeline">
-        <header className="leads-section-head"><div><h2>Pipeline de Leads <span>(Funil)</span></h2><small>Arraste os cartões entre as etapas para atualizar o status</small></div><div className="lead-pipeline-actions"><select aria-label="Selecionar funil"><option>Funil Padrão</option></select><button>◉ Personalizar</button><button aria-label="Visualização em lista">☷</button><button className="active" aria-label="Visualização em colunas">▦</button></div></header>
-        <div className="lead-kanban">
-          {pipelineColumns.map((column, columnIndex) => <article className={`lead-kanban-column lead-kanban-column--${column.tone}`} key={column.title}>
-            <header><b>{column.title}</b><div><span>{column.count} Leads</span><strong>{column.total}</strong></div></header>
-            <div className="lead-kanban-cards">{column.cards.map((card, cardIndex) => <button className="lead-kanban-card" key={card[0]}><div><LeadAvatar initials={card[4]} index={columnIndex + cardIndex}/><span><b>{card[0]}</b><small>{card[1]}</small></span><i>{column.tone === 'green' ? '✓' : String.fromCharCode(65 + (cardIndex % 2))}</i></div><footer><strong>{card[2]}</strong><time>{card[3]}</time></footer></button>)}</div>
-            <button className="lead-kanban-more">＋ Ver mais {column.more} leads</button>
-          </article>)}
-        </div>
-      </section>
-
+    <div className="leads-primary-grid leads-primary-grid--insights">
       <aside className="leads-side-column">
         <section className="leads-surface lead-source-card"><header className="leads-section-head"><h2>Leads por Fonte</h2><select aria-label="Período"><option>Este mês</option></select></header><div className="lead-source-body"><div className="lead-source-donut"><strong>286</strong><span>Novos Leads</span></div><ul>{leadSources.map(([name,value,count,tone])=><li className={`lead-source--${tone}`} key={name}><i/><span>{name}</span><b>{value}% <em>({count})</em></b></li>)}</ul></div></section>
         <section className="leads-surface lead-activity-card"><header className="leads-section-head"><h2>Atividades Recentes</h2><button>Ver todas</button></header><ul>{activities.map(([icon,title,name,time,tone])=><li key={`${title}-${name}`}><i className={`fluent lead-activity-icon lead-activity-icon--${tone}`}>{icon}</i><span><b>{title}</b><small>{name}</small></span><time>{time}</time></li>)}</ul></section>
