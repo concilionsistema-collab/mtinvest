@@ -1,16 +1,39 @@
-import { Controller, Get, Body, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Body,
+  FileTypeValidator,
+  HttpCode,
+  HttpStatus,
+  MaxFileSizeValidator,
+  Param,
+  ParseFilePipe,
+  Patch,
+  Post,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { Usuario } from '@crm/shared';
 import { CurrentTenant } from '../../common/tenant/current-tenant.decorator';
 import { CurrentUsuario } from '../../common/auth/current-usuario.decorator';
 import { UsuarioAutenticado } from '../../common/auth/usuario-autenticado';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { UploadedFile, UseInterceptors, Res } from '@nestjs/common';
 import { Response } from 'express';
-import * as fs from 'fs';
-import * as path from 'path';
 import { AlterarSenhaDto } from './dto/alterar-senha.dto';
 import { CriarUsuarioDto } from './dto/criar-usuario.dto';
 import { UsuariosService } from './usuarios.service';
+
+// Sem @types/multer no projeto (nao ha necessidade de nenhum outro tipo de
+// Express.Multer.File) - forma minima do que os handlers abaixo realmente
+// usam, resolvida em runtime pelo FileInterceptor do @nestjs/platform-express.
+interface ArquivoEnviado {
+  buffer: Buffer;
+  mimetype: string;
+  size: number;
+}
+
+const TAMANHO_MAXIMO_FOTO_BYTES = 5 * 1024 * 1024;
 
 @Controller('usuarios')
 export class UsuariosController {
@@ -68,34 +91,51 @@ export class UsuariosController {
     return this.usuariosService.desligar(tenantId, id, ator.id);
   }
 
+  // Guardada no Postgres, nao em disco - ver comentario em schema.prisma
+  // (Usuario.fotoPerfil). ParseFilePipe (built-in do Nest) valida tamanho e
+  // tipo ANTES do controller rodar - preferido a um fileFilter do multer
+  // porque o erro sai como uma BadRequestException normal do Nest (mesmo
+  // formato de erro que qualquer outro endpoint), nao como um erro cru do
+  // multer sem tratamento.
   @Post(':id/foto')
   @UseInterceptors(FileInterceptor('file'))
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.NO_CONTENT)
   async uploadFoto(
+    @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @UploadedFile() file: any,
-  ) {
-    if (!file) {
-      throw new Error('Nenhum arquivo enviado');
-    }
-    const uploadDir = path.join(process.cwd(), 'uploads', 'perfil');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    const filename = `${id}.jpg`;
-    const filePath = path.join(uploadDir, filename);
-    fs.writeFileSync(filePath, file.buffer);
-    return { success: true, url: `/api/usuarios/${id}/foto` };
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: TAMANHO_MAXIMO_FOTO_BYTES }),
+          new FileTypeValidator({ fileType: /^image\/(jpeg|png|webp)$/ }),
+        ],
+      }),
+    )
+    file: ArquivoEnviado,
+  ): Promise<void> {
+    await this.usuariosService.salvarFoto(tenantId, id, file.buffer, file.mimetype);
   }
 
+  // Autenticado como qualquer outra rota (JwtAuthGuard e global) - por isso
+  // o front-end NAO pode usar <img src="/usuarios/:id/foto"> diretamente (a
+  // tag <img> nao envia o header Authorization); precisa buscar via
+  // apiFetchBlob (lib/api.ts) e montar um object URL. Ver DEPLOY.md e
+  // components equipe/page.tsx.
   @Get(':id/foto')
-  async obterFoto(@Param('id') id: string, @Res() res: Response) {
-    const uploadDir = path.join(process.cwd(), 'uploads', 'perfil');
-    const filePath = path.join(uploadDir, `${id}.jpg`);
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(HttpStatus.NOT_FOUND).send('Foto não encontrada');
+  async obterFoto(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const foto = await this.usuariosService.obterFoto(tenantId, id);
+    if (!foto) {
+      res.status(HttpStatus.NOT_FOUND).send();
+      return;
     }
+    res.setHeader('Content-Type', foto.contentType);
+    // private: a foto e por usuario autenticado, nunca deve ser guardada em
+    // cache compartilhado (proxy/CDN) de terceiros.
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(foto.bytes);
   }
 }

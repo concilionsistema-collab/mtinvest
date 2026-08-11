@@ -145,29 +145,41 @@ Se a tela de login carrega mas o login falha, abra o console do navegador:
 
 ## Limitações conhecidas deste setup
 
-### A API hiberna (plano free do Render)
+### A API hiberna (plano free do Render) — trocar antes de vender
 
 Após 15 min sem tráfego o serviço dorme. A requisição seguinte demora **30 a
 50 segundos** — para o usuário, parece que o sistema travou no login.
 
-Para uso real por corretores no dia a dia, o plano **Starter (US$ 7/mês)**
-elimina isso. É a única mudança necessária: nada no código muda.
+O deploy inicial usa o plano **free** de propósito, só para validar que tudo
+funciona ponta a ponta sem custo. Para qualquer cliente pagante, isso **precisa**
+virar o plano **Starter (US$ 7/mês)** antes de vender — o cliente não vai saber
+que "demorou porque hibernou", só vai ver o sistema travando no login. É a
+única mudança necessária para isso: painel do Render → serviço → **Settings →
+Instance Type** → Starter. Nada no código muda.
 
 Não resolva isso com um pinger externo de 5 em 5 minutos — além de violar os
-termos do plano free, consome as horas gratuitas do mês.
+termos do plano free, consome as horas gratuitas do mês, e ainda deixa o
+sistema hibernando de verdade fora da janela do pinger.
 
-### Foto de perfil não persiste (e hoje já não funciona)
+**Checklist antes do primeiro cliente pagante:**
+- [ ] Render: Instance Type = Starter (elimina a hibernação)
+- [ ] `JWT_SECRET` de produção gerado (Passo 2), nunca o de desenvolvimento
+- [ ] `CORS_ORIGIN` fechado no domínio real do cliente (Passo 5)
+- [ ] Testado o fluxo completo de login + upload de foto de outra máquina
 
-`POST /usuarios/:id/foto` grava em disco local
-([`usuarios.controller.ts:81`](apps/api/src/modules/usuarios/usuarios.controller.ts#L81)).
-O disco do Render é efêmero: some a cada deploy.
+### Foto de perfil — corrigido (2026-08-11)
 
-Isso **não é uma regressão do deploy** — o recurso já está quebrado localmente.
-O portal pede a imagem com `<img src>`, que não envia o header `Authorization`,
-então o `JwtAuthGuard` global responde 401 e a tela sempre cai no fallback de
-iniciais. Consertar de verdade significa guardar a imagem no Postgres (ou no
-Supabase Storage) e servi-la por uma rota autenticada. Trabalho separado, ainda
-não feito.
+Estava quebrado antes desta correção: `POST /usuarios/:id/foto` gravava em
+disco local, que some a cada deploy no Render, e o portal pedia a imagem com
+`<img src>` — que não envia o header `Authorization`, então o `JwtAuthGuard`
+global respondia 401 e a tela sempre caía no fallback de iniciais. Não era
+uma regressão do deploy: já estava quebrado localmente.
+
+Agora a foto é gravada no próprio Postgres (colunas `foto_perfil` / `foto_perfil_tipo`
+em `Usuario`, migration `20260811130000_usuario_foto_perfil_bytes`) e servida
+por uma rota autenticada; o portal busca via `apiFetchBlob` (`lib/api.ts`) e
+monta um object URL, em vez de uma `<img src>` direta. Sobrevive a redeploy e
+funciona com qualquer plano do Render, inclusive o free.
 
 ### Migrations continuam manuais
 

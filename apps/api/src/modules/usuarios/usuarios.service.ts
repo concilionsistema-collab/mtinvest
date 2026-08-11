@@ -39,7 +39,13 @@ function paraUsuario(registro: UsuarioRecord): Usuario {
     perfil: registro.perfil,
     status: registro.status,
     criadoEm: registro.criadoEm.toISOString(),
+    temFotoPerfil: registro.fotoPerfilTipo != null,
   };
+}
+
+export interface FotoDeUsuario {
+  bytes: Buffer;
+  contentType: string;
 }
 
 @Injectable()
@@ -215,6 +221,39 @@ export class UsuariosService {
       }
 
       return paraUsuario(atualizado);
+    });
+  }
+
+  // EXTENSAO REGISTRADA (tela "Equipe"): guarda a foto no proprio Postgres -
+  // ver comentario em schema.prisma (Usuario.fotoPerfil) sobre o porque de
+  // nao usar disco. Mesmo padrao de tenant-scoping dos demais metodos:
+  // findFirst({id, tenantId}) antes do update, para responder 404 (nao um
+  // erro de update em linha inexistente) quando o id nao pertence a este
+  // tenant - a RLS ja impediria o vazamento entre tenants de qualquer forma,
+  // isto so torna o erro claro na camada da aplicacao.
+  async salvarFoto(tenantId: string, usuarioId: string, bytes: Buffer, contentType: string): Promise<void> {
+    return this.tenantPrisma.run(tenantId, async (tx) => {
+      const usuario = await tx.usuario.findFirst({ where: { id: usuarioId, tenantId } });
+      if (!usuario) {
+        throw new NotFoundException('Usuário não encontrado neste tenant.');
+      }
+
+      await tx.usuario.update({
+        where: { id: usuarioId },
+        data: { fotoPerfil: bytes, fotoPerfilTipo: contentType, fotoPerfilAtualizadaEm: new Date() },
+      });
+    });
+  }
+
+  // Retorna null (nunca lança) quando o usuário não tem foto - a rota HTTP
+  // trata isso como 404 simples, o mesmo estado de "sem foto ainda".
+  async obterFoto(tenantId: string, usuarioId: string): Promise<FotoDeUsuario | null> {
+    return this.tenantPrisma.run(tenantId, async (tx) => {
+      const usuario = await tx.usuario.findFirst({ where: { id: usuarioId, tenantId } });
+      if (!usuario || !usuario.fotoPerfil || !usuario.fotoPerfilTipo) {
+        return null;
+      }
+      return { bytes: Buffer.from(usuario.fotoPerfil), contentType: usuario.fotoPerfilTipo };
     });
   }
 }

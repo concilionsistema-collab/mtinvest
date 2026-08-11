@@ -330,3 +330,72 @@ describe('UsuariosService - obterPerfil/alterarSenha (Configurações)', () => {
     });
   });
 });
+
+// EXTENSAO REGISTRADA (tela "Equipe"): foto de perfil guardada no Postgres -
+// ver comentario em schema.prisma (Usuario.fotoPerfil).
+describe('UsuariosService - salvarFoto/obterFoto (tela Equipe)', () => {
+  const tenantId = 'tenant-1';
+
+  describe('salvarFoto', () => {
+    it('grava os bytes e o content-type no usuario do proprio tenant', async () => {
+      const usuarioFindFirst = jest.fn().mockResolvedValue({ id: 'usr1', tenantId });
+      const usuarioUpdate = jest.fn().mockResolvedValue({});
+      const { service } = criarServicoComTx({ usuarioFindFirst, usuarioUpdate });
+      const bytes = Buffer.from('fake-jpeg-bytes');
+
+      await service.salvarFoto(tenantId, 'usr1', bytes, 'image/jpeg');
+
+      expect(usuarioUpdate).toHaveBeenCalledWith({
+        where: { id: 'usr1' },
+        data: { fotoPerfil: bytes, fotoPerfilTipo: 'image/jpeg', fotoPerfilAtualizadaEm: expect.any(Date) },
+      });
+    });
+
+    it('usuario de outro tenant nao e encontrado (404) - nunca grava', async () => {
+      const usuarioFindFirst = jest.fn().mockResolvedValue(null);
+      const usuarioUpdate = jest.fn();
+      const { service } = criarServicoComTx({ usuarioFindFirst, usuarioUpdate });
+
+      await expect(
+        service.salvarFoto(tenantId, 'usr-de-outro-tenant', Buffer.from('x'), 'image/jpeg'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(usuarioUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('obterFoto', () => {
+    it('retorna os bytes e o content-type quando o usuario tem foto', async () => {
+      const bytes = Buffer.from('fake-jpeg-bytes');
+      const usuarioFindFirst = jest.fn().mockResolvedValue({
+        id: 'usr1',
+        tenantId,
+        fotoPerfil: bytes,
+        fotoPerfilTipo: 'image/jpeg',
+      });
+      const { service } = criarServicoComTx({ usuarioFindFirst });
+
+      const resultado = await service.obterFoto(tenantId, 'usr1');
+
+      expect(resultado).toEqual({ bytes, contentType: 'image/jpeg' });
+    });
+
+    it('retorna null (nao lanca) quando o usuario existe mas nunca fez upload', async () => {
+      const usuarioFindFirst = jest.fn().mockResolvedValue({
+        id: 'usr1',
+        tenantId,
+        fotoPerfil: null,
+        fotoPerfilTipo: null,
+      });
+      const { service } = criarServicoComTx({ usuarioFindFirst });
+
+      await expect(service.obterFoto(tenantId, 'usr1')).resolves.toBeNull();
+    });
+
+    it('retorna null quando o usuario nao pertence a este tenant (RLS/filtro de aplicacao)', async () => {
+      const usuarioFindFirst = jest.fn().mockResolvedValue(null);
+      const { service } = criarServicoComTx({ usuarioFindFirst });
+
+      await expect(service.obterFoto(tenantId, 'usr-de-outro-tenant')).resolves.toBeNull();
+    });
+  });
+});

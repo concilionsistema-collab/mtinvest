@@ -16,6 +16,8 @@ export interface Usuario {
   perfil: UsuarioPerfil;
   status: UsuarioStatus;
   criadoEm: string;
+  /** Evita o front-end pedir GET /usuarios/:id/foto para quem nunca teve upload (sempre 404). */
+  temFotoPerfil: boolean;
 }
 
 /** US-002: só quem já é GESTOR_UNIDADE pode conceder o perfil GESTOR_UNIDADE (CA-002). */

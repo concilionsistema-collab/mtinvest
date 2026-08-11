@@ -3,10 +3,8 @@
 import { FormEvent, useEffect, useState, useRef } from 'react';
 import type { Usuario, UsuarioPerfil } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
-import { apiFetch, ApiError } from '../../lib/api';
+import { apiFetch, apiFetchBlob, ApiError } from '../../lib/api';
 import { buttonStyle, cardStyle, inputStyle } from '../../lib/styles';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 // Usamos apenas os perfis disponíveis no momento no banco.
 // O backend restringe a criação (GESTOR_UNIDADE só pode criar GESTOR_UNIDADE se ele for também).
@@ -95,10 +93,14 @@ export default function EquipePage() {
         body: formData,
       });
 
-      // Atualiza o token da imagem para forçar recarregamento
+      // Recarrega a lista (atualiza usuario.temFotoPerfil - crucial no
+      // primeiro upload, quando ainda é false) e ainda assim bumpa o token,
+      // pra forçar a busca da imagem mesmo quando temFotoPerfil já era true
+      // (reenvio de foto sobre uma que já existia).
+      await carregar();
       setImageTokens(prev => ({ ...prev, [usuarioSelecionadoParaFoto]: Date.now() }));
     } catch {
-      setErro('Falha ao fazer upload da foto. Verifique se o servidor suporta uploads locais.');
+      setErro('Falha ao fazer upload da foto. Use uma imagem JPEG, PNG ou WebP de até 5 MB.');
     } finally {
       setUploadingId(null);
       setUsuarioSelecionadoParaFoto(null);
@@ -106,14 +108,39 @@ export default function EquipePage() {
     }
   }
 
-  // Componente de Avatar com fallback
+  // Componente de Avatar com fallback. A foto é servida por uma rota
+  // autenticada (JwtAuthGuard é global) - uma <img src="..."> comum não
+  // envia o header Authorization, então busca-se o Blob via apiFetchBlob e
+  // monta-se um object URL. temFotoPerfil evita a chamada de rede (sempre
+  // 404) para quem nunca fez upload.
   const Avatar = ({ usuario }: { usuario: Usuario }) => {
-    const [imgErro, setImgErro] = useState(false);
+    const [objectUrl, setObjectUrl] = useState<string | null>(null);
     const token = imageTokens[usuario.id] || 0;
-    const src = `${API_URL}/usuarios/${usuario.id}/foto?t=${token}`;
 
-    if (imgErro) {
-      // Fallback: Iniciais
+    useEffect(() => {
+      if (!usuario.temFotoPerfil) {
+        setObjectUrl(null);
+        return;
+      }
+      let cancelado = false;
+      let urlCriada: string | null = null;
+      apiFetchBlob(`/usuarios/${usuario.id}/foto`)
+        .then((blob) => {
+          if (cancelado || !blob) return;
+          urlCriada = URL.createObjectURL(blob);
+          setObjectUrl(urlCriada);
+        })
+        .catch(() => {
+          if (!cancelado) setObjectUrl(null);
+        });
+      return () => {
+        cancelado = true;
+        if (urlCriada) URL.revokeObjectURL(urlCriada);
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [usuario.id, usuario.temFotoPerfil, token]);
+
+    if (!objectUrl) {
       const iniciais = usuario.nome.substring(0, 2).toUpperCase();
       return (
         <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'var(--purple)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 20 }}>
@@ -124,10 +151,9 @@ export default function EquipePage() {
 
     return (
       <img
-        src={src}
+        src={objectUrl}
         alt={`Foto de ${usuario.nome}`}
         style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', background: 'var(--surface-hover)' }}
-        onError={() => setImgErro(true)}
       />
     );
   };

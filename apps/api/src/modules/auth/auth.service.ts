@@ -29,6 +29,7 @@ function paraUsuario(registro: UsuarioRecord): Usuario {
     perfil: registro.perfil,
     status: registro.status,
     criadoEm: registro.criadoEm.toISOString(),
+    temFotoPerfil: registro.fotoPerfilTipo != null,
   };
 }
 

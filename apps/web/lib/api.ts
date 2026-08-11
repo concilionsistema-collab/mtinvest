@@ -95,3 +95,33 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   return paraResultado<T>(resposta, path);
 }
+
+/**
+ * Variante de apiFetch para recursos binários (ex.: foto de perfil,
+ * GET /usuarios/:id/foto) — não dá pra usar uma <img src="..."> direto
+ * porque a tag não envia o header Authorization, e essas rotas exigem
+ * sessão como qualquer outra. O chamador monta um object URL a partir do
+ * Blob (e chama URL.revokeObjectURL depois, pra não vazar memória).
+ *
+ * Retorna null em 404 (recurso ainda não existe, ex.: usuário sem foto) —
+ * esse é um estado esperado, não uma falha a ser tratada como erro.
+ */
+export async function apiFetchBlob(path: string): Promise<Blob | null> {
+  const token = obterToken();
+  let resposta = await requisitar(path, undefined, token);
+
+  if (resposta.status === 401) {
+    const novoToken = await renovarSessao();
+    if (novoToken) {
+      resposta = await requisitar(path, undefined, novoToken);
+    }
+  }
+
+  if (resposta.status === 404) {
+    return null;
+  }
+  if (!resposta.ok) {
+    throw new ApiError(resposta.status, `Falha na chamada a ${path} (HTTP ${resposta.status}).`);
+  }
+  return resposta.blob();
+}

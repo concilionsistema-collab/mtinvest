@@ -236,6 +236,16 @@ model Usuario {
   status     UsuarioStatus @default(ATIVO)
   criadoEm   DateTime      @default(now()) @map("criado_em")
 
+  // EXTENSAO REGISTRADA (tela "Equipe"): foto de perfil, guardada no proprio
+  // Postgres (nao em disco) de proposito - a API roda em hospedagem com disco
+  // efemero (perdido a cada deploy), e o Postgres ja e o unico armazenamento
+  // duravel que este sistema tem. fotoPerfilTipo guarda o content-type
+  // original (ex. "image/jpeg") para a rota de leitura devolver o header
+  // certo sem precisar inspecionar os bytes.
+  fotoPerfil             Bytes?    @map("foto_perfil")
+  fotoPerfilTipo         String?   @map("foto_perfil_tipo")
+  fotoPerfilAtualizadaEm DateTime? @map("foto_perfil_atualizada_em")
+
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   unidade Unidade @relation(fields: [unidadeId], references: [id])
 
