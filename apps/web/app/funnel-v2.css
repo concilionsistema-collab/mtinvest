@@ -88,19 +88,21 @@
 
 /* Prévia profissional do dashboard: legível, compacta e vinculada ao tema ativo. */
 .compact-sales-funnel { height: 236px; display: flex; flex-direction: column; gap: 8px; color: var(--text-primary, #f8fafc); font-variant-numeric: tabular-nums; }
-.compact-sales-funnel__summary { min-height: 32px; padding: 4px 10px; display: flex; align-items: center; justify-content: space-between; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--bg-card-elevated) 82%, var(--bg-card)); color: var(--text-secondary); font-size: 10px; }
+.compact-sales-funnel__summary { min-height: 32px; padding: 4px 10px; display: flex; align-items: center; justify-content: space-between; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--bg-card-elevated) 82%, var(--bg-card)); color: var(--text-secondary); font-size: 10px; transition: border-color .22s ease, background-color .22s ease; }
+.compact-sales-funnel__summary > * { animation: compact-funnel-detail .24s ease both; }
 .compact-sales-funnel__summary b { padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--primary) 62%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--primary) 13%, var(--bg-card)); color: var(--primary); font-size: 12px; font-weight: 800; }
 .compact-sales-funnel ol { list-style: none; min-height: 0; margin: 0; padding: 0; display: flex; flex: 1; flex-direction: column; gap: 3px; }
-.compact-sales-funnel li { --stage-accent: var(--primary); position: relative; min-height: 0; flex: 1; display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; }
+.compact-sales-funnel li { --stage-accent: var(--primary); position: relative; min-height: 0; flex: 1; display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; animation: compact-funnel-enter .5s cubic-bezier(.2,.75,.25,1) both; animation-delay: calc(var(--compact-order) * 65ms); }
 .compact-sales-funnel li:nth-child(2) { --stage-accent: color-mix(in srgb, var(--primary) 72%, var(--secondary)); }
 .compact-sales-funnel li:nth-child(3) { --stage-accent: var(--secondary); }
 .compact-sales-funnel li:nth-child(4) { --stage-accent: var(--warning); }
 .compact-sales-funnel li:nth-child(5) { --stage-accent: color-mix(in srgb, var(--primary) 76%, var(--secondary)); }
 .compact-sales-funnel li:nth-child(6) { --stage-accent: var(--success); }
 .compact-sales-funnel li:not(:last-child)::before { content: ''; position: absolute; left: 13px; top: calc(50% + 14px); height: calc(50% - 10px); border-left: 1px dashed color-mix(in srgb, var(--stage-accent) 46%, transparent); }
-.compact-sales-funnel__marker { z-index: 2; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--stage-accent) 78%, var(--border)); border-radius: 50%; background: var(--bg-card); color: var(--text-primary); font-size: 9px; font-weight: 850; box-shadow: 0 0 0 3px color-mix(in srgb, var(--stage-accent) 8%, transparent); transition: border-color .22s ease, background-color .22s ease, box-shadow .22s ease; }
-.compact-sales-funnel__layer { position: relative; isolation: isolate; justify-self: center; overflow: hidden; width: var(--compact-width); height: 100%; min-height: 30px; padding: 0 12px; display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: center; gap: 7px; clip-path: polygon(1% 0, 99% 0, 94% 100%, 6% 100%); background: linear-gradient(90deg, color-mix(in srgb, var(--stage-accent) 62%, #07101b), color-mix(in srgb, var(--stage-accent) 87%, #07101b) 48%, color-mix(in srgb, var(--stage-accent) 70%, #07101b)); color: #fff; filter: drop-shadow(0 3px 4px color-mix(in srgb, #000 30%, transparent)); text-shadow: 0 1px 2px rgba(0, 0, 0, .68); transition: background .22s ease, filter .22s ease; }
+.compact-sales-funnel__marker { z-index: 2; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--stage-accent) 78%, var(--border)); border-radius: 50%; background: var(--bg-card); color: var(--text-primary); font-size: 9px; font-weight: 850; box-shadow: 0 0 0 3px color-mix(in srgb, var(--stage-accent) 8%, transparent); transition: transform .22s ease, border-color .22s ease, background-color .22s ease, box-shadow .22s ease; }
+.compact-sales-funnel__layer { position: relative; isolation: isolate; justify-self: center; overflow: hidden; width: var(--compact-width); height: 100%; min-height: 30px; padding: 0 12px; display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: center; gap: 7px; border: 0; clip-path: polygon(1% 0, 99% 0, 94% 100%, 6% 100%); background: linear-gradient(90deg, color-mix(in srgb, var(--stage-accent) 62%, #07101b), color-mix(in srgb, var(--stage-accent) 87%, #07101b) 48%, color-mix(in srgb, var(--stage-accent) 70%, #07101b)); color: #fff; cursor: pointer; filter: drop-shadow(0 3px 4px color-mix(in srgb, #000 30%, transparent)); text-align: left; text-shadow: 0 1px 2px rgba(0, 0, 0, .68); transform-origin: center; transition: transform .22s cubic-bezier(.2,.8,.2,1), background .22s ease, filter .22s ease; }
 .compact-sales-funnel__layer::before { content: ''; position: absolute; z-index: -1; inset: 0 2% auto; height: 7px; border-top: 1px solid color-mix(in srgb, var(--stage-accent) 62%, white); border-radius: 50%; background: linear-gradient(180deg, rgba(3, 11, 23, .72), transparent); }
+.compact-sales-funnel__layer::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,.2) 46%, transparent 70%); transform: translateX(-115%); transition: transform .5s ease; }
 .compact-sales-funnel__icon { width: 25px; height: 25px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, #fff 16%, transparent); border-radius: 50%; background: color-mix(in srgb, #fff 13%, transparent); color: #fff; }
 .compact-sales-funnel__icon svg { width: 14px; height: 14px; }
 .compact-sales-funnel__copy { min-width: 0; display: flex; flex-direction: column; line-height: 1; }
@@ -108,7 +110,27 @@
 .compact-sales-funnel__copy b { color: #fff !important; font-size: 10px; font-weight: 750; letter-spacing: -.1px; }
 .compact-sales-funnel__copy small { margin-top: 3px; color: rgba(255, 255, 255, .76) !important; font-size: 8px; font-weight: 500; }
 .compact-sales-funnel__layer strong { padding-left: 4px; color: #fff !important; font-size: 11px; font-weight: 850; white-space: nowrap; }
-.compact-sales-funnel li:hover .compact-sales-funnel__layer { filter: brightness(1.08) drop-shadow(0 4px 7px color-mix(in srgb, var(--stage-accent) 22%, transparent)); }
+.compact-sales-funnel li:hover .compact-sales-funnel__layer,
+.compact-sales-funnel__layer:focus-visible,
+.compact-sales-funnel__stage--active .compact-sales-funnel__layer { transform: translateY(-1px) scale(1.018); filter: brightness(1.1) drop-shadow(0 5px 8px color-mix(in srgb, var(--stage-accent) 28%, transparent)); }
+.compact-sales-funnel li:hover .compact-sales-funnel__layer::after,
+.compact-sales-funnel__layer:focus-visible::after,
+.compact-sales-funnel__stage--active .compact-sales-funnel__layer::after { transform: translateX(115%); }
+.compact-sales-funnel__layer:focus-visible { outline: 2px solid var(--stage-accent); outline-offset: 2px; }
+.compact-sales-funnel__stage--active .compact-sales-funnel__marker { transform: scale(1.08); border-color: var(--stage-accent); background: color-mix(in srgb, var(--stage-accent) 16%, var(--bg-card)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--stage-accent) 12%, transparent), 0 0 14px color-mix(in srgb, var(--stage-accent) 34%, transparent); animation: compact-funnel-pulse 1.8s ease-in-out infinite; }
+
+@keyframes compact-funnel-enter { from { opacity: 0; transform: translateY(7px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes compact-funnel-detail { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes compact-funnel-pulse { 0%,100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--stage-accent) 10%, transparent), 0 0 10px color-mix(in srgb, var(--stage-accent) 24%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--stage-accent) 4%, transparent), 0 0 17px color-mix(in srgb, var(--stage-accent) 42%, transparent); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .compact-sales-funnel li,
+  .compact-sales-funnel__summary > *,
+  .compact-sales-funnel__stage--active .compact-sales-funnel__marker { animation: none; }
+  .compact-sales-funnel__layer,
+  .compact-sales-funnel__layer::after,
+  .compact-sales-funnel__marker { transition: none; }
+}
 
 [data-theme="corporate-light"] .compact-sales-funnel__summary { box-shadow: inset 0 1px #fff; }
 [data-theme="corporate-light"] .compact-sales-funnel__marker { background: var(--bg-card-elevated); }

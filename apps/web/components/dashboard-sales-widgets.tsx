@@ -87,30 +87,44 @@ export function PremiumSalesFunnel() {
 export function CompactSalesFunnel() {
   const nomes = ['Novos Leads', 'Qualificados', 'Visitas', 'Propostas', 'Negociação', 'Fechados'];
   const larguras = [100, 92, 84, 76, 68, 60];
+  const [indiceAtivo, setIndiceAtivo] = useState<number | null>(null);
+  const etapaAtiva = indiceAtivo === null ? null : ETAPAS_SVG[indiceAtivo];
 
   return (
     <div className="compact-sales-funnel">
-      <div className="compact-sales-funnel__summary">
-        <span>Conversão total</span>
-        <b>2,2%</b>
+      <div className="compact-sales-funnel__summary" aria-live="polite">
+        <span key={`label-${indiceAtivo ?? 'conversion'}`}>
+          {etapaAtiva ? nomes[indiceAtivo!] : 'Conversão total'}
+        </span>
+        <b key={`value-${indiceAtivo ?? 'conversion'}`}>
+          {etapaAtiva ? `${etapaAtiva.valor} · ${etapaAtiva.percentual}` : '2,2%'}
+        </b>
       </div>
       <ol aria-label="Resumo do funil de vendas">
         {ETAPAS_SVG.map((etapa, indice) => (
           <li
+            className={indiceAtivo === indice ? 'compact-sales-funnel__stage--active' : ''}
             key={etapa.id}
             style={{
               '--compact-width': `${larguras[indice]}%`,
+              '--compact-order': indice,
             } as CSSProperties}
           >
             <span className="compact-sales-funnel__marker" aria-hidden="true">{etapa.id}</span>
-            <div className="compact-sales-funnel__layer">
+            <button
+              className="compact-sales-funnel__layer"
+              type="button"
+              aria-label={`${nomes[indice]}: ${etapa.valor} leads, ${etapa.percentual}. Mostrar detalhes`}
+              aria-pressed={indiceAtivo === indice}
+              onClick={() => setIndiceAtivo((atual) => atual === indice ? null : indice)}
+            >
               <span className="compact-sales-funnel__icon" aria-hidden="true">{etapa.icone}</span>
               <span className="compact-sales-funnel__copy">
                 <b>{nomes[indice]}</b>
                 <small>{etapa.valor} leads</small>
               </span>
               <strong>{etapa.percentual}</strong>
-            </div>
+            </button>
           </li>
         ))}
       </ol>
