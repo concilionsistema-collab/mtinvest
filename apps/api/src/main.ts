@@ -15,11 +15,34 @@ const JWT_SECRET_TAMANHO_MINIMO = 32;
 // mensagem que aponta a causa exata (mesmo espirito do achado real desta
 // sessao com Usuario.fotoPerfilUrl - ver README, "Problemas reais ja
 // encontrados").
+// Origens autorizadas a chamar a API pelo navegador. Separadas por virgula,
+// com espacos tolerados ("a, b") - um espaco sobrando na variavel de ambiente
+// do painel de hospedagem viraria uma origem que nunca casa, e o sintoma
+// (erro de CORS no navegador, API respondendo 200 no curl) e dos mais caros
+// de diagnosticar.
+function origensPermitidas(): string[] {
+  return (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
+    .split(',')
+    .map((origem) => origem.trim())
+    .filter((origem) => origem.length > 0);
+}
+
 function validarVariaveisDeAmbiente(): void {
   const erros: string[] = [];
 
   if (!process.env.DATABASE_URL) {
     erros.push('DATABASE_URL ausente - a aplicacao nao consegue conectar ao Postgres.');
+  }
+
+  // Em producao o default de desenvolvimento (http://localhost:3000) nunca e
+  // a origem certa: ou o front-end tem dominio proprio e a variavel precisa
+  // apontar pra ele, ou a API ficaria acessivel so por um front-end que nao
+  // existe naquele ambiente. Falhar na subida evita subir uma API que responde
+  // a tudo menos ao proprio portal.
+  if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
+    erros.push(
+      'CORS_ORIGIN ausente em producao - defina a(s) origem(ns) do portal, ex.: "https://seu-portal.vercel.app".',
+    );
   }
 
   const jwtSecret = process.env.JWT_SECRET;
@@ -59,10 +82,13 @@ async function bootstrap(): Promise<void> {
   // origens diferentes - CORP e um header de protecao de recurso, aplicado
   // pelo navegador independente do CORS ja configurado abaixo.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  // CORS restritivo (ART-012): so a origem do front-end local pode chamar a API.
-  // TODO(prod): trocar por lista de origens vinda de configuracao antes do deploy real.
+  // CORS restritivo (ART-012): so as origens configuradas podem chamar a API.
+  // Em producao a lista vem obrigatoriamente de CORS_ORIGIN (validada na
+  // subida, ver validarVariaveisDeAmbiente) - o default de localhost so vale
+  // em desenvolvimento. Aceita varias origens separadas por virgula, ex.:
+  // "https://crm.vercel.app,https://crm-preview.vercel.app".
   app.enableCors({
-    origin: (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(','),
+    origin: origensPermitidas(),
     credentials: true,
   });
   app.useGlobalPipes(
@@ -73,7 +99,14 @@ async function bootstrap(): Promise<void> {
     }),
   );
   const port = process.env.PORT ? Number(process.env.PORT) : 3001;
-  await app.listen(port);
+  // '0.0.0.0' explicito: plataformas de hospedagem em container (Render, Fly,
+  // Railway) so conseguem rotear trafego pro processo se ele escutar em todas
+  // as interfaces. O default do Node ja e esse, mas deixar implicito significa
+  // que qualquer mudanca futura pra '127.0.0.1' (comum em exemplos de dev)
+  // derrubaria o deploy com um health check falhando sem explicacao.
+  await app.listen(port, '0.0.0.0');
+  // eslint-disable-next-line no-console
+  console.log(`API ouvindo na porta ${port}. Origens CORS: ${origensPermitidas().join(', ')}`);
 }
 
 bootstrap();

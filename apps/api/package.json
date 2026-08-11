@@ -6,6 +6,7 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "start:prod": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit --tsBuildInfoFile dist/.typecheck.tsbuildinfo",
     "test": "jest",
     "test:integration": "jest --config jest.integration.config.js",
