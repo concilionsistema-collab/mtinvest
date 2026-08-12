@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build --workspace=packages/shared && npx prisma generate --schema=prisma/schema.prisma",
-  "installCommand": "npm ci",
+  "installCommand": "cd ../.. && npm ci",
+  "buildCommand": "cd ../.. && npm run build --workspace=packages/shared && npx prisma generate --schema=apps/api/prisma/schema.prisma",
   "functions": {
     "api/index.ts": {
       "maxDuration": 60

@@ -109,7 +109,16 @@ login de novo) — como o ambiente é novo, não custa nada agora.
    isso que faz a Vercel usar `apps/api/vercel.json` (build, rewrites, cron)
    em vez do `vercel.json` do portal.
 4. Em **Framework Preset**, deixe como "Other" (não é Next.js).
-5. Variáveis de ambiente (**Settings → Environment Variables**):
+5. Na mesma tela (ou depois, em **Settings → General → Root Directory**),
+   confirme que **"Include files outside of the Root Directory in the Build
+   Step"** está **habilitado**. Sem isso, o build não enxerga
+   `packages/shared` nem o `node_modules` da raiz do monorepo - o sintoma é
+   `npm ci` instalando um punhado de pacotes (só os de `apps/api`) em vez do
+   monorepo inteiro. `installCommand`/`buildCommand` em `apps/api/vercel.json`
+   já fazem `cd ../..` de propósito por causa disso, mas o toggle acima
+   também precisa estar ligado para o bundler da função enxergar os arquivos
+   fora de `apps/api`.
+6. Variáveis de ambiente (**Settings → Environment Variables**):
 
 | Variável | Valor |
 |---|---|
@@ -117,11 +126,11 @@ login de novo) — como o ambiente é novo, não custa nada agora.
 | `JWT_SECRET` | o primeiro segredo do Passo 2 |
 | `CRON_SECRET` | o segundo segredo do Passo 2 |
 | `NODE_ENV` | `production` |
-| `CORS_ORIGIN` | por enquanto `http://localhost:3000` — ajustamos no Passo 5 |
+| `CORS_ORIGIN` | o domínio do projeto do portal (ex. `https://mtinvest-web.vercel.app`) |
 
-6. Deploy. Ao terminar, anote o domínio gerado, ex.
+7. Deploy. Ao terminar, anote o domínio gerado, ex.
    `https://mtinvest-api.vercel.app`.
-7. Confirme que subiu:
+8. Confirme que subiu:
 
 ```bash
 curl https://mtinvest-api.vercel.app/health
