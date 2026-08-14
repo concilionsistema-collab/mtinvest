@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "cd ../.. && npm ci --include=dev",
-  "buildCommand": "cd ../.. && npm run build --workspace=packages/shared && npx prisma generate --schema=apps/api/prisma/schema.prisma && mkdir -p apps/api/public",
+  "buildCommand": "cd ../.. && npm run build --workspace=packages/shared && npx prisma generate --schema=apps/api/prisma/schema.prisma && mkdir -p apps/api/public && echo 'Este projeto so serve api/index.ts - ver rewrites em vercel.json.' > apps/api/public/index.html",
   "outputDirectory": "public",
   "functions": {
     "api/index.ts": {
