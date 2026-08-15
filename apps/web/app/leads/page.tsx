@@ -50,6 +50,28 @@ const pipelineColumns: PipelineColumn[] = [
   ]},
 ];
 
+type PreferenciasFunil = { ordem: string[]; ocultas: string[] };
+const CHAVE_PREFERENCIAS_FUNIL = 'concilion-crm-funil-preferencias';
+
+// Le a personalizacao do funil (ordem/visibilidade das etapas) do localStorage -
+// so client-side de proposito, nao existe conceito de "preferencia de funil por
+// usuario" no backend ainda. Reconcilia com titulosPadrao pra nao quebrar se as
+// etapas do pipeline mudarem entre versoes (etapa removida some da preferencia
+// salva, etapa nova entra no fim).
+function carregarPreferenciasFunil(titulosPadrao: string[]): PreferenciasFunil {
+  if (typeof window === 'undefined') return { ordem: titulosPadrao, ocultas: [] };
+  try {
+    const bruto = window.localStorage.getItem(CHAVE_PREFERENCIAS_FUNIL);
+    if (!bruto) return { ordem: titulosPadrao, ocultas: [] };
+    const salvo = JSON.parse(bruto) as PreferenciasFunil;
+    const ordemValida = salvo.ordem.filter((titulo) => titulosPadrao.includes(titulo));
+    const faltantes = titulosPadrao.filter((titulo) => !ordemValida.includes(titulo));
+    return { ordem: [...ordemValida, ...faltantes], ocultas: salvo.ocultas.filter((titulo) => titulosPadrao.includes(titulo)) };
+  } catch {
+    return { ordem: titulosPadrao, ocultas: [] };
+  }
+}
+
 const leadSources = [
   ['Site / Portal', 38, 109, 'purple'], ['Indicação', 22, 63, 'blue'], ['Redes Sociais', 18, 52, 'cyan'], ['Campanhas', 12, 34, 'orange'], ['Outros', 10, 28, 'gold'],
 ] as const;
@@ -95,6 +117,10 @@ export default function LeadsPage() {
   const [busca, setBusca] = useState('');
   const [pipeline, setPipeline] = useState<PipelineColumn[]>(() => pipelineColumns.map((column) => ({ ...column, cards: column.cards.map((card) => [...card]) as PipelineCard[] })));
   const [leadArrastado, setLeadArrastado] = useState<string | null>(null);
+  const titulosPadraoPipeline = useMemo(() => pipelineColumns.map((coluna) => coluna.title), []);
+  const [preferenciasFunil, setPreferenciasFunil] = useState<PreferenciasFunil>(() => carregarPreferenciasFunil(titulosPadraoPipeline));
+  const [visualizacaoPipeline, setVisualizacaoPipeline] = useState<'colunas' | 'lista'>('colunas');
+  const [personalizarAberto, setPersonalizarAberto] = useState(false);
   const [unidadeId, setUnidadeId] = useState('');
   const [nomeContato, setNomeContato] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -117,6 +143,23 @@ export default function LeadsPage() {
 
   useEffect(() => { if (sessao) void carregarDados(); }, [sessao?.tenantId]);
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(CHAVE_PREFERENCIAS_FUNIL, JSON.stringify(preferenciasFunil));
+  }, [preferenciasFunil]);
+
+  const pipelineVisivel = useMemo(() => {
+    const porTitulo = new Map(pipeline.map((coluna) => [coluna.title, coluna]));
+    return preferenciasFunil.ordem
+      .filter((titulo) => !preferenciasFunil.ocultas.includes(titulo))
+      .map((titulo) => porTitulo.get(titulo))
+      .filter((coluna): coluna is PipelineColumn => Boolean(coluna));
+  }, [pipeline, preferenciasFunil]);
+
+  const linhasListaPipeline = useMemo(
+    () => pipelineVisivel.flatMap((coluna) => coluna.cards.map((card) => ({ coluna, card }))),
+    [pipelineVisivel],
+  );
+  useEffect(() => {
     const abrirPeloEndereco = () => setModalAberto(window.location.hash === '#novo-lead');
     abrirPeloEndereco(); window.addEventListener('hashchange', abrirPeloEndereco);
     return () => window.removeEventListener('hashchange', abrirPeloEndereco);
@@ -124,16 +167,27 @@ export default function LeadsPage() {
 
   const leadsFiltrados = useMemo(() => tableLeads.filter((lead) => `${lead.name} ${lead.source} ${lead.interest}`.toLowerCase().includes(busca.toLowerCase())), [busca]);
 
-  function moverLead(destino: number) {
-    if (!leadArrastado) return;
+  // idLead opcional: drag-and-drop (Kanban) usa o leadArrastado ja setado via
+  // onDragStart; o seletor "Mover para" (Lista) passa o id direto, porque o
+  // onChange dispara e le o novo estado antes de qualquer setState anterior
+  // ter efeito (setLeadArrastado + moverLead na mesma funcao nao veriam o
+  // valor atualizado por causa do closure do React).
+  function moverLead(destinoTitulo: string, idLead?: string) {
+    const alvo = idLead ?? leadArrastado;
+    if (!alvo) return;
     setPipeline((colunas) => {
-      const origem = colunas.findIndex((coluna) => coluna.cards.some((card) => card[0] === leadArrastado));
-      if (origem < 0 || origem === destino) return colunas;
-      const card = colunas[origem].cards.find((item) => item[0] === leadArrastado);
+      const origem = colunas.findIndex((coluna) => coluna.cards.some((card) => card[0] === alvo));
+      const destino = colunas.findIndex((coluna) => coluna.title === destinoTitulo);
+      if (origem < 0 || destino < 0 || origem === destino) return colunas;
+      const card = colunas[origem].cards.find((item) => item[0] === alvo);
       if (!card) return colunas;
-      return colunas.map((coluna, indice) => ({
+      return colunas.map((coluna) => ({
         ...coluna,
-        cards: indice === origem ? coluna.cards.filter((item) => item[0] !== leadArrastado) : indice === destino ? [...coluna.cards, card] : coluna.cards,
+        cards: coluna.title === colunas[origem].title
+          ? coluna.cards.filter((item) => item[0] !== alvo)
+          : coluna.title === destinoTitulo
+            ? [...coluna.cards, card]
+            : coluna.cards,
       }));
     });
     setLeadArrastado(null);
@@ -174,9 +228,9 @@ export default function LeadsPage() {
     {(aviso || erro) && <div className={`leads-toast ${erro ? 'leads-toast--error' : ''}`}>{erro ?? aviso}<button onClick={() => { setErro(null); setAviso(null); }}>×</button></div>}
 
     <section className="leads-surface lead-pipeline" aria-labelledby="lead-pipeline-title">
-      <header className="leads-section-head"><div><h2 id="lead-pipeline-title">Pipeline de Leads <span>(Funil)</span></h2><small>Arraste os cartões entre as etapas para atualizar o status</small></div><div className="lead-pipeline-actions"><select aria-label="Selecionar funil"><option>Funil Padrão</option></select><button>⚙ Personalizar</button><button aria-label="Visualização em lista">☷</button><button className="active" aria-label="Visualização em colunas">▦</button></div></header>
-      <div className="lead-kanban">
-        {pipeline.map((column, columnIndex) => <article className={`lead-kanban-column lead-kanban-column--${column.tone}`} key={column.title} onDragOver={prepararDestino} onDrop={() => moverLead(columnIndex)}>
+      <header className="leads-section-head"><div><h2 id="lead-pipeline-title">Pipeline de Leads <span>(Funil)</span></h2><small>{visualizacaoPipeline === 'colunas' ? 'Arraste os cartões entre as etapas para atualizar o status' : 'Use "Mover para" em cada linha para atualizar o status'}</small></div><div className="lead-pipeline-actions"><select aria-label="Selecionar funil"><option>Funil Padrão</option></select><button onClick={() => setPersonalizarAberto(true)}>⚙ Personalizar</button><button onClick={() => setVisualizacaoPipeline('lista')} className={visualizacaoPipeline === 'lista' ? 'active' : ''} aria-label="Visualização em lista" aria-pressed={visualizacaoPipeline === 'lista'}>☷</button><button onClick={() => setVisualizacaoPipeline('colunas')} className={visualizacaoPipeline === 'colunas' ? 'active' : ''} aria-label="Visualização em colunas" aria-pressed={visualizacaoPipeline === 'colunas'}>▦</button></div></header>
+      {visualizacaoPipeline === 'colunas' ? <div className="lead-kanban">
+        {pipelineVisivel.map((column, columnIndex) => <article className={`lead-kanban-column lead-kanban-column--${column.tone}`} key={column.title} onDragOver={prepararDestino} onDrop={() => moverLead(column.title)}>
           <header><b>{column.title}</b><div><span>{column.count + column.cards.length - 4} Leads</span><strong>{column.total}</strong></div></header>
           <div className="lead-kanban-cards">{column.cards.map((card, cardIndex) => {
             const originalColumn = pipelineColumns.findIndex((item) => item.cards.some((original) => original[0] === card[0]));
@@ -188,7 +242,16 @@ export default function LeadsPage() {
           })}</div>
           <button className="lead-kanban-more">＋ Ver mais {column.more} leads</button>
         </article>)}
-      </div>
+      </div> : <div className="lead-table-card lead-pipeline-list"><div className="lead-table-scroll"><table><thead><tr><th>Lead</th><th>Interesse</th><th>Valor</th><th>Etapa</th><th>Tempo</th><th>Mover para</th></tr></thead><tbody>
+        {linhasListaPipeline.map(({ coluna, card }, indice) => <tr key={card[0]}>
+          <td><div className="lead-name-cell"><LeadAvatar initials={card[4]} index={indice} /><b>{card[0]}</b></div></td>
+          <td>{card[1]}</td>
+          <td><b>{card[2]}</b></td>
+          <td><em className={`lead-status lead-status--${coluna.tone}`}>{coluna.title}</em></td>
+          <td>{card[3]}</td>
+          <td><select aria-label={`Mover ${card[0]} para outra etapa`} value={coluna.title} onChange={(evento) => moverLead(evento.target.value, card[0])}>{pipelineVisivel.map((c) => <option key={c.title} value={c.title}>{c.title}</option>)}</select></td>
+        </tr>)}
+      </tbody></table></div></div>}
     </section>
 
     <section className="lead-kpi-grid" aria-label="Indicadores de leads">
@@ -223,5 +286,19 @@ export default function LeadsPage() {
       <label>Orçamento máximo<input type="number" value={orcamentoMaximo} onChange={(evento)=>setOrcamentoMaximo(evento.target.value)} placeholder="R$ 0" /></label>
       <footer><button type="button" onClick={fecharModal}>Cancelar</button><button type="submit" disabled={carregando || unidades.length===0}>{carregando?'Salvando...':'Criar Lead'}</button></footer>
     </form></section></div>}
+
+    {personalizarAberto && <div className="lead-modal-backdrop" role="presentation" onMouseDown={(evento)=>{if(evento.target===evento.currentTarget)setPersonalizarAberto(false);}}><section className="lead-modal" role="dialog" aria-modal="true" aria-labelledby="personalizar-funil-title"><header><div><h2 id="personalizar-funil-title">Personalizar Funil</h2><p>Escolha quais etapas aparecem e a ordem delas no Kanban e na Lista.</p></div><button onClick={()=>setPersonalizarAberto(false)} aria-label="Fechar">×</button></header>
+      <div className="lead-personalizar-lista">{preferenciasFunil.ordem.map((titulo, indice) => {
+        const oculta = preferenciasFunil.ocultas.includes(titulo);
+        return <div className="lead-personalizar-item" key={titulo}>
+          <label><input type="checkbox" checked={!oculta} onChange={() => setPreferenciasFunil((preferencias) => ({ ...preferencias, ocultas: oculta ? preferencias.ocultas.filter((item) => item !== titulo) : [...preferencias.ocultas, titulo] }))} />{titulo}</label>
+          <span className="lead-personalizar-mover">
+            <button type="button" disabled={indice === 0} aria-label={`Mover ${titulo} para cima`} onClick={() => setPreferenciasFunil((preferencias) => { const nova = [...preferencias.ordem]; [nova[indice - 1], nova[indice]] = [nova[indice], nova[indice - 1]]; return { ...preferencias, ordem: nova }; })}>↑</button>
+            <button type="button" disabled={indice === preferenciasFunil.ordem.length - 1} aria-label={`Mover ${titulo} para baixo`} onClick={() => setPreferenciasFunil((preferencias) => { const nova = [...preferencias.ordem]; [nova[indice + 1], nova[indice]] = [nova[indice], nova[indice + 1]]; return { ...preferencias, ordem: nova }; })}>↓</button>
+          </span>
+        </div>;
+      })}</div>
+      <footer className="lead-personalizar-footer"><button type="button" onClick={() => setPreferenciasFunil({ ordem: titulosPadraoPipeline, ocultas: [] })}>Restaurar padrão</button><button type="button" className="lead-personalizar-concluir" onClick={() => setPersonalizarAberto(false)}>Concluir</button></footer>
+    </section></div>}
   </main>;
 }
