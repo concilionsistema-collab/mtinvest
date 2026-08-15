@@ -1,7 +1,11 @@
 import type { LoginResultado } from '@crm/shared';
 import { limparRefreshToken, limparToken, obterRefreshToken, obterToken, salvarRefreshToken, salvarToken } from './auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+// A origem local é fixa para impedir que chunks antigos apontem para túneis
+// temporários. No domínio publicado, a URL continua vindo da configuração.
+const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  ? 'http://localhost:3001'
+  : process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

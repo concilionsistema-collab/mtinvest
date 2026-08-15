@@ -14,7 +14,12 @@ import {
   tokenExpirado,
 } from '../lib/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+// Em desenvolvimento, nunca reaproveita no navegador um endpoint temporário
+// gravado em cache por um build anterior. A prévia local sempre conversa com
+// a API local; produção continua usando a variável configurada na Vercel.
+const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  ? 'http://localhost:3001'
+  : process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export interface SessaoAtiva {
   tenantId: string;
