@@ -228,15 +228,15 @@ export default function LeadsPage() {
   }, [preferenciasFunil]);
 
   const pipelineVisivel = useMemo(() => {
-    const porTitulo = new Map(pipeline.map((coluna) => [coluna.title, coluna]));
+    const porTitulo = new Map(colunasPipeline.map((coluna) => [coluna.title, coluna]));
     return preferenciasFunil.ordem
       .filter((titulo) => !preferenciasFunil.ocultas.includes(titulo))
       .map((titulo) => porTitulo.get(titulo))
-      .filter((coluna): coluna is PipelineColumn => Boolean(coluna));
-  }, [pipeline, preferenciasFunil]);
+      .filter((coluna): coluna is (typeof colunasPipeline)[number] => Boolean(coluna));
+  }, [colunasPipeline, preferenciasFunil]);
 
   const linhasListaPipeline = useMemo(
-    () => pipelineVisivel.flatMap((coluna) => coluna.cards.map((card) => ({ coluna, card }))),
+    () => pipelineVisivel.flatMap((coluna) => coluna.cartoes.map((cartao) => ({ coluna, cartao }))),
     [pipelineVisivel],
   );
   useEffect(() => {
@@ -247,30 +247,63 @@ export default function LeadsPage() {
 
   const leadsFiltrados = useMemo(() => tableLeads.filter((lead) => `${lead.name} ${lead.source} ${lead.interest}`.toLowerCase().includes(busca.toLowerCase())), [busca]);
 
-  // idLead opcional: drag-and-drop (Kanban) usa o leadArrastado ja setado via
-  // onDragStart; o seletor "Mover para" (Lista) passa o id direto, porque o
-  // onChange dispara e le o novo estado antes de qualquer setState anterior
-  // ter efeito (setLeadArrastado + moverLead na mesma funcao nao veriam o
-  // valor atualizado por causa do closure do React).
-  function moverLead(destinoTitulo: string, idLead?: string) {
-    const alvo = idLead ?? leadArrastado;
+  function mensagemDeErro(erro: unknown, fallback: string): string {
+    return erro instanceof ApiError && erro.backendMessage ? erro.backendMessage : fallback;
+  }
+
+  // idOportunidade opcional: drag-and-drop (Kanban) usa oportunidadeArrastada
+  // ja setado via onDragStart; o seletor "Mover para" (Lista) e os botoes do
+  // modal de detalhe passam o id direto, porque o handler roda antes de
+  // qualquer setState anterior ter efeito (setOportunidadeArrastada + mover
+  // na mesma funcao nao veriam o valor atualizado por causa do closure do
+  // React). Valida a transicao no cliente so pra dar feedback imediato -
+  // quem decide de verdade e sempre o backend (ver TRANSICOES_VALIDAS em
+  // oportunidades.service.ts), que revalida tudo de novo.
+  async function moverOportunidade(destinoTitulo: string, idOportunidade?: string) {
+    const alvo = idOportunidade ?? oportunidadeArrastada;
+    setOportunidadeArrastada(null);
     if (!alvo) return;
-    setPipeline((colunas) => {
-      const origem = colunas.findIndex((coluna) => coluna.cards.some((card) => card[0] === alvo));
-      const destino = colunas.findIndex((coluna) => coluna.title === destinoTitulo);
-      if (origem < 0 || destino < 0 || origem === destino) return colunas;
-      const card = colunas[origem].cards.find((item) => item[0] === alvo);
-      if (!card) return colunas;
-      return colunas.map((coluna) => ({
-        ...coluna,
-        cards: coluna.title === colunas[origem].title
-          ? coluna.cards.filter((item) => item[0] !== alvo)
-          : coluna.title === destinoTitulo
-            ? [...coluna.cards, card]
-            : coluna.cards,
-      }));
-    });
-    setLeadArrastado(null);
+    const atual = oportunidades.find((item) => item.id === alvo);
+    const destino = ESTADOS_OPORTUNIDADE.find((item) => item.label === destinoTitulo);
+    if (!atual || !destino || atual.estado === destino.estado) return;
+
+    if (!TRANSICOES_VALIDAS[atual.estado].includes(destino.estado)) {
+      setErro(`Não é possível mover direto de "${infoEstado(atual.estado).label}" para "${destino.label}".`);
+      return;
+    }
+
+    setMovendoId(alvo);
+    setErro(null);
+    try {
+      // DOCUMENTACAO_CONCLUIDA -> FECHADA tem uma rota propria (/fechar) -
+      // alem de mudar o estado, ela registra o gatilho de comissao cruzada
+      // quando o imovel e de outra unidade (RN-309, ART-009).
+      const atualizada = atual.estado === 'DOCUMENTACAO_CONCLUIDA' && destino.estado === 'FECHADA'
+        ? await apiFetch<Oportunidade>(`/oportunidades/${alvo}/fechar`, { method: 'POST' })
+        : await apiFetch<Oportunidade>(`/oportunidades/${alvo}/mover`, { method: 'POST', body: JSON.stringify({ estadoDestino: destino.estado }) });
+      setOportunidades((atuais) => atuais.map((item) => (item.id === alvo ? atualizada : item)));
+      setAviso(`Movida para "${destino.label}".`);
+    } catch (erro) {
+      setErro(mensagemDeErro(erro, 'Não foi possível mover a oportunidade.'));
+    } finally {
+      setMovendoId(null);
+    }
+  }
+
+  // US-013/RN-302 (ART-009): registra uma tentativa de contato - conta pro
+  // minimo exigido antes de aceitar mover para "Perdida" (o backend rejeita
+  // com uma mensagem explicando quantas faltam, ver mensagemDeErro acima).
+  async function registrarTentativaDeContato(idOportunidade: string) {
+    setMovendoId(idOportunidade);
+    setErro(null);
+    try {
+      const resultado = await apiFetch<{ tentativasRegistradas: number }>(`/oportunidades/${idOportunidade}/tentativas-contato`, { method: 'POST' });
+      setAviso(`Tentativa de contato registrada (${resultado.tentativasRegistradas} ao todo).`);
+    } catch (erro) {
+      setErro(mensagemDeErro(erro, 'Não foi possível registrar a tentativa de contato.'));
+    } finally {
+      setMovendoId(null);
+    }
   }
 
   function prepararDestino(evento: DragEvent<HTMLElement>) {
@@ -309,27 +342,34 @@ export default function LeadsPage() {
 
     <section className="leads-surface lead-pipeline" aria-labelledby="lead-pipeline-title">
       <header className="leads-section-head"><div><h2 id="lead-pipeline-title">Pipeline de Leads <span>(Funil)</span></h2><small>{visualizacaoPipeline === 'colunas' ? 'Arraste os cartões entre as etapas para atualizar o status' : 'Use "Mover para" em cada linha para atualizar o status'}</small></div><div className="lead-pipeline-actions"><select aria-label="Selecionar funil"><option>Funil Padrão</option></select><button onClick={() => setPersonalizarAberto(true)}>⚙ Personalizar</button><button onClick={() => setVisualizacaoPipeline('lista')} className={visualizacaoPipeline === 'lista' ? 'active' : ''} aria-label="Visualização em lista" aria-pressed={visualizacaoPipeline === 'lista'}>☷</button><button onClick={() => setVisualizacaoPipeline('colunas')} className={visualizacaoPipeline === 'colunas' ? 'active' : ''} aria-label="Visualização em colunas" aria-pressed={visualizacaoPipeline === 'colunas'}>▦</button></div></header>
+      {oportunidades.length === 0 && !erro && <p className="lead-pipeline-vazio">Nenhuma oportunidade ainda — crie uma em <a href="/oportunidades">Negociações</a> vinculando um lead a um imóvel para ela aparecer aqui.</p>}
       {visualizacaoPipeline === 'colunas' ? <div className="lead-kanban">
-        {pipelineVisivel.map((column, columnIndex) => <article className={`lead-kanban-column lead-kanban-column--${column.tone}`} key={column.title} onDragOver={prepararDestino} onDrop={() => moverLead(column.title)}>
-          <header><b>{column.title}</b><div><span>{column.count + column.cards.length - 4} Leads</span><strong>{column.total}</strong></div></header>
-          <div className="lead-kanban-cards">{column.cards.map((card, cardIndex) => {
-            const originalColumn = pipelineColumns.findIndex((item) => item.cards.some((original) => original[0] === card[0]));
-            const originalCard = originalColumn < 0 ? cardIndex : pipelineColumns[originalColumn].cards.findIndex((item) => item[0] === card[0]);
-            const avatarIndex = originalColumn < 0 ? columnIndex * 4 + cardIndex : originalColumn * 4 + originalCard;
-            return <button className={`lead-kanban-card ${leadArrastado === card[0] ? 'lead-kanban-card--dragging' : ''}`} key={card[0]} draggable onDragStart={(evento) => { setLeadArrastado(card[0]); evento.dataTransfer.effectAllowed = 'move'; evento.dataTransfer.setData('text/plain', card[0]); }} onDragEnd={() => setLeadArrastado(null)} aria-label={`${card[0]}, ${card[1]}, ${card[2]}`}>
-              <LeadAvatar initials={card[4]} index={avatarIndex}/><span className="lead-card-copy"><span className="lead-card-name"><i>{card[4]}</i><b>{card[0]}</b></span><small>{card[1]}</small><footer><strong>{card[2]}</strong><time>{card[3]}</time></footer></span><i className="lead-card-status">{column.tone === 'green' ? '✓' : String.fromCharCode(65 + (cardIndex % 2))}</i>
-            </button>;
-          })}</div>
-          <button className="lead-kanban-more">＋ Ver mais {column.more} leads</button>
+        {pipelineVisivel.map((column) => <article className={`lead-kanban-column lead-kanban-column--${column.tone}`} key={column.title} onDragOver={prepararDestino} onDrop={() => moverOportunidade(column.title)}>
+          <header><b>{column.title}</b><div><span>{column.cartoes.length} {column.cartoes.length === 1 ? 'oportunidade' : 'oportunidades'}</span><strong>{formatarValor(column.total)}</strong></div></header>
+          <div className="lead-kanban-cards">{column.cartoes.map((cartao, cardIndex) => (
+            <button
+              className={`lead-kanban-card ${oportunidadeArrastada === cartao.id ? 'lead-kanban-card--dragging' : ''} ${movendoId === cartao.id ? 'lead-kanban-card--movendo' : ''}`}
+              key={cartao.id}
+              disabled={movendoId === cartao.id}
+              draggable
+              onDragStart={(evento) => { setOportunidadeArrastada(cartao.id); evento.dataTransfer.effectAllowed = 'move'; evento.dataTransfer.setData('text/plain', cartao.id); }}
+              onDragEnd={() => setOportunidadeArrastada(null)}
+              onClick={() => setDetalheOportunidadeId(cartao.id)}
+              aria-label={`${cartao.nome}, ${cartao.interesse}, ${formatarValor(cartao.valor)} - clique para ver detalhes e avançar etapa`}
+            >
+              <LeadAvatar initials={cartao.iniciais} index={cardIndex} /><span className="lead-card-copy"><span className="lead-card-name"><i>{cartao.iniciais}</i><b>{cartao.nome}</b></span><small>{cartao.interesse}</small><footer><strong>{formatarValor(cartao.valor)}</strong><time>{formatarIdade(cartao.criadoEm)}</time></footer></span><i className="lead-card-status">{column.estado === 'FECHADA' ? '✓' : column.estado === 'PERDIDA' ? '✕' : '›'}</i>
+            </button>
+          ))}</div>
         </article>)}
-      </div> : <div className="lead-table-card lead-pipeline-list"><div className="lead-table-scroll"><table><thead><tr><th>Lead</th><th>Interesse</th><th>Valor</th><th>Etapa</th><th>Tempo</th><th>Mover para</th></tr></thead><tbody>
-        {linhasListaPipeline.map(({ coluna, card }, indice) => <tr key={card[0]}>
-          <td><div className="lead-name-cell"><LeadAvatar initials={card[4]} index={indice} /><b>{card[0]}</b></div></td>
-          <td>{card[1]}</td>
-          <td><b>{card[2]}</b></td>
+      </div> : <div className="lead-table-card lead-pipeline-list"><div className="lead-table-scroll"><table><thead><tr><th>Lead</th><th>Interesse</th><th>Valor</th><th>Etapa</th><th>Tempo</th><th>Mover para</th><th>Detalhes</th></tr></thead><tbody>
+        {linhasListaPipeline.map(({ coluna, cartao }, indice) => <tr key={cartao.id}>
+          <td><div className="lead-name-cell"><LeadAvatar initials={cartao.iniciais} index={indice} /><b>{cartao.nome}</b></div></td>
+          <td>{cartao.interesse}</td>
+          <td><b>{formatarValor(cartao.valor)}</b></td>
           <td><em className={`lead-status lead-status--${coluna.tone}`}>{coluna.title}</em></td>
-          <td>{card[3]}</td>
-          <td><select aria-label={`Mover ${card[0]} para outra etapa`} value={coluna.title} onChange={(evento) => moverLead(evento.target.value, card[0])}>{pipelineVisivel.map((c) => <option key={c.title} value={c.title}>{c.title}</option>)}</select></td>
+          <td>{formatarIdade(cartao.criadoEm)}</td>
+          <td><select aria-label={`Mover ${cartao.nome} para outra etapa`} disabled={movendoId === cartao.id} value={coluna.title} onChange={(evento) => moverOportunidade(evento.target.value, cartao.id)}>{ESTADOS_OPORTUNIDADE.map((c) => <option key={c.label} value={c.label}>{c.label}</option>)}</select></td>
+          <td><button type="button" onClick={() => setDetalheOportunidadeId(cartao.id)}>Ver</button></td>
         </tr>)}
       </tbody></table></div></div>}
     </section>
@@ -379,6 +419,28 @@ export default function LeadsPage() {
         </div>;
       })}</div>
       <footer className="lead-personalizar-footer"><button type="button" onClick={() => setPreferenciasFunil({ ordem: titulosPadraoPipeline, ocultas: [] })}>Restaurar padrão</button><button type="button" className="lead-personalizar-concluir" onClick={() => setPersonalizarAberto(false)}>Concluir</button></footer>
+    </section></div>}
+
+    {detalheOportunidade && <div className="lead-modal-backdrop" role="presentation" onMouseDown={(evento) => { if (evento.target === evento.currentTarget) setDetalheOportunidadeId(null); }}><section className="lead-modal lead-detalhe-modal" role="dialog" aria-modal="true" aria-labelledby="detalhe-oportunidade-title">
+      <header><div><h2 id="detalhe-oportunidade-title">{detalheOportunidade.nome}</h2><p>{detalheOportunidade.interesse}</p></div><button onClick={() => setDetalheOportunidadeId(null)} aria-label="Fechar">×</button></header>
+      <div className="lead-detalhe-corpo">
+        <dl className="lead-detalhe-info">
+          <div><dt>Etapa atual</dt><dd><em className={`lead-status lead-status--${infoEstado(detalheOportunidade.estado).tone}`}>{infoEstado(detalheOportunidade.estado).label}</em></dd></div>
+          <div><dt>Valor do imóvel</dt><dd>{formatarValor(detalheOportunidade.valor)}</dd></div>
+          <div><dt>Oportunidade criada</dt><dd>{new Date(detalheOportunidade.criadoEm).toLocaleDateString('pt-BR')} ({formatarIdade(detalheOportunidade.criadoEm)})</dd></div>
+        </dl>
+
+        <div className="lead-detalhe-acoes">
+          <button type="button" disabled={movendoId === detalheOportunidade.id} onClick={() => registrarTentativaDeContato(detalheOportunidade.id)}>☎ Registrar tentativa de contato</button>
+          {TRANSICOES_VALIDAS[detalheOportunidade.estado].length === 0
+            ? <p className="lead-detalhe-terminal">{detalheOportunidade.estado === 'FECHADA' ? 'Negócio fechado — não há próxima etapa.' : 'Oportunidade perdida — não há próxima etapa.'}</p>
+            : TRANSICOES_VALIDAS[detalheOportunidade.estado].map((destino) => (
+              <button key={destino} type="button" disabled={movendoId === detalheOportunidade.id} className={destino === 'PERDIDA' ? 'lead-detalhe-perder' : 'lead-detalhe-avancar'} onClick={() => moverOportunidade(infoEstado(destino).label, detalheOportunidade.id)}>
+                {destino === 'PERDIDA' ? 'Marcar como perdida' : `Avançar para ${infoEstado(destino).label} →`}
+              </button>
+            ))}
+        </div>
+      </div>
     </section></div>}
   </main>;
 }

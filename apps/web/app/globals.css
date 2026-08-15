@@ -649,7 +649,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .lead-pipeline-actions button,.lead-pipeline-actions select{height:36px;padding:0 12px;border-color:#294057;border-radius:9px;background:#091a29;color:#edf2f7;font-size:10px;box-shadow:inset 0 1px rgba(255,255,255,.025)}
 .lead-pipeline-actions select{min-width:118px}
 .lead-pipeline-actions button.active{border-color:#5d36b0;background:#21134b;color:#c5a5ff;box-shadow:0 0 22px rgba(108,56,218,.15)}
-.lead-kanban{min-width:1080px;padding:0 10px 10px;grid-template-columns:repeat(5,minmax(205px,1fr));gap:5px}
+.lead-kanban{min-width:1080px;padding:0 10px 10px;grid-template-columns:repeat(auto-fill,205px);gap:5px}
 .lead-kanban-column{min-width:205px;display:flex;flex-direction:column;border-color:#263b50;border-radius:9px;background:linear-gradient(180deg,rgba(17,31,45,.94),#0a1521);box-shadow:inset 0 1px rgba(255,255,255,.025)}
 .lead-kanban-column>header{height:70px;padding:13px 11px 10px;background:linear-gradient(135deg,color-mix(in srgb,var(--column) 78%,#101d31),color-mix(in srgb,var(--column) 42%,#102033));box-shadow:inset 0 1px rgba(255,255,255,.13)}
 .lead-kanban-column>header>b{font-size:13px;letter-spacing:-.1px}
@@ -678,6 +678,25 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .leads-primary-grid--insights .leads-side-column{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto}
 .lead-pipeline-list{margin:0 10px 10px;border:1px solid #263b50;border-radius:9px}
 .lead-pipeline-list select{height:26px;padding:0 6px;border:1px solid #20364a;border-radius:6px;background:#0c1927;color:#cbd4dc;font-size:7px}
+.lead-pipeline-vazio{margin:0 10px 12px;padding:11px 13px;border:1px solid #20364a;border-radius:9px;background:#0b1927;color:#9babbe;font-size:11px}
+.lead-pipeline-vazio a{color:#b589ff;font-weight:650}
+.lead-kanban-column--gold{--column:#c9971c}
+.lead-kanban-column--red{--column:#d64545}
+.lead-status--gold{background:#5c4611;color:#f5d98a}
+.lead-status--red{background:#5c1f1f;color:#ffb3b3}
+.lead-kanban-card--movendo{opacity:.55;cursor:wait}
+.lead-detalhe-modal{width:min(460px,100%)}
+.lead-detalhe-corpo{padding:17px 18px;display:flex;flex-direction:column;gap:16px}
+.lead-detalhe-info{margin:0;display:flex;flex-direction:column;gap:10px}
+.lead-detalhe-info>div{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lead-detalhe-info dt{color:#8f9dad;font-size:10px}
+.lead-detalhe-info dd{margin:0;color:#edf2f6;font-size:12px;font-weight:650}
+.lead-detalhe-acoes{display:flex;flex-direction:column;gap:8px}
+.lead-detalhe-acoes button{height:42px;padding:0 16px;border:1px solid #294056;border-radius:8px;background:#102032;color:#d4dce4;font-size:11px;text-align:left}
+.lead-detalhe-acoes button:disabled{opacity:.5;cursor:wait}
+.lead-detalhe-avancar{border-color:#7142d6!important;background:#7142d6!important;color:#fff!important;font-weight:700;text-align:center!important}
+.lead-detalhe-perder{border-color:#8a2f2f!important;color:#ffb3b3!important}
+.lead-detalhe-terminal{margin:0;padding:11px 13px;border:1px solid #20364a;border-radius:8px;background:#0b1927;color:#9babbe;font-size:11px}
 .lead-personalizar-lista{padding:14px 18px;display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto}
 .lead-personalizar-item{padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #20364a;border-radius:8px;background:#0b1927}
 .lead-personalizar-item label{display:flex;align-items:center;gap:9px;color:#d4dce4;font-size:11px}
@@ -691,7 +710,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .lead-personalizar-concluir{border-color:#7142d6!important;background:#7142d6!important;color:#fff!important;font-weight:700}
 
 @media(max-width:1450px){
-  .lead-kanban{grid-template-columns:repeat(5,minmax(205px,1fr))}
+  .lead-kanban{grid-template-columns:repeat(auto-fill,205px)}
 }
 @media(max-width:900px){
   .lead-pipeline>.leads-section-head{min-height:62px}
@@ -705,6 +724,6 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   .lead-pipeline>.leads-section-head h2{font-size:17px}
   .lead-pipeline>.leads-section-head>div>small{font-size:9px}
   .lead-pipeline-actions select,.lead-pipeline-actions button:not(.active){display:none}
-  .lead-kanban{min-width:1025px;grid-template-columns:repeat(5,205px);padding:0 8px 8px}
+  .lead-kanban{min-width:1025px;grid-template-columns:repeat(auto-fill,205px);padding:0 8px 8px}
   .lead-kanban-column{min-width:205px}
 }

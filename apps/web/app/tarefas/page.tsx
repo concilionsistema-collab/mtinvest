@@ -23,6 +23,7 @@ const ICONS = {
   more: '\uE712', mail: '\uE715', people: '\uE716', location: '\uE81D', tag: '\uE8EC',
   board: '\uE8A9', list: '\uEA37', close: '\uE711', warning: '\uE7BA', spark: '\uE735',
   chevron: '\uE70D', whatsapp: '\uE8F2', document: '\uE8A5', grip: '\uE700', search: '\uE721',
+  settings: '\uE713', chart: '\uE9D9', attachment: '\uE723', up: '\uE70E',
 } as const;
 
 const DEMO_TASKS: VisualTarefa[] = [
@@ -82,6 +83,7 @@ export default function TarefasPage() {
   const [filtro, setFiltro] = useState<Filtro>('hoje');
   const [selecionadaId, setSelecionadaId] = useState<string>('demo-1');
   const [detalhesAbertos, setDetalhesAbertos] = useState(true);
+  const [assistenteAberto, setAssistenteAberto] = useState(true);
 
   async function carregar() {
     try {
@@ -242,10 +244,56 @@ export default function TarefasPage() {
           </div>
         </section>
 
-        <section className={styles.aiStrip}>
-          <div className={styles.aiBrand}><span><Icon name="spark" /></span><b>RAPHAEL <small>IA</small></b></div>
-          <div className={styles.suggestions}><small>Sugestões para você</small><div><Icon name="person" /><p>3 leads quentes estão<br/><b>sem follow-up há 48h.</b></p><button>Ver leads</button></div><div><Icon name="spark" /><p>Proposta da Ana Paula<br/><b>vence amanhã.</b></p><button>Ver proposta</button></div><div><Icon name="calendar" /><p>Você tem uma visita<br/><b>sem confirmação às 15:00.</b></p><button>Ver visitas</button></div></div>
-          <button className={styles.seeAll}>Ver todas →</button>
+        <section className={`${styles.aiStrip} ${!assistenteAberto ? styles.aiCollapsed : ''}`} aria-label="Assistente inteligente CONCI">
+          <aside className={styles.aiIdentity}>
+            <img src="/task-ai-assistant.jpg" alt="CONCI, assistente inteligente do CRM" />
+            <strong>CONCI</strong>
+            <span>Assistente Inteligente</span>
+            <em><i /> Online</em>
+          </aside>
+
+          <div className={styles.aiBody}>
+            <header className={styles.aiHeader}>
+              <h2><Icon name="spark" /> Sugestões para você</h2>
+              <div><button type="button"><Icon name="settings" /> Configurar assistente</button><button type="button" aria-label={assistenteAberto ? 'Recolher assistente' : 'Expandir assistente'} onClick={() => setAssistenteAberto((aberto) => !aberto)}><Icon name={assistenteAberto ? 'up' : 'chevron'} /></button></div>
+            </header>
+
+            {assistenteAberto && <>
+              <div className={styles.aiMain}>
+                <div className={styles.aiCards}>
+                  <article className={`${styles.aiCard} ${styles.aiCardUrgent}`}>
+                    <button className={styles.aiMore} aria-label="Mais opções"><Icon name="more" /></button><img src="/task-ai-fire.jpg" alt="Alerta de leads quentes" /><span>URGENTE</span>
+                    <h3>3 leads quentes<br/>sem follow-up</h3><p>Há mais de 48h sem contato.</p><button className={styles.aiCta}>Ver leads <b>→</b></button>
+                  </article>
+                  <article className={`${styles.aiCard} ${styles.aiCardImportant}`}>
+                    <button className={styles.aiMore} aria-label="Mais opções"><Icon name="more" /></button><img src="/task-ai-document.jpg" alt="Proposta importante" /><span>IMPORTANTE</span>
+                    <h3>Proposta da<br/>Ana Paula</h3><p>Vence amanhã.</p><button className={styles.aiCta}>Ver proposta <b>→</b></button>
+                  </article>
+                  <article className={`${styles.aiCard} ${styles.aiCardAgenda}`}>
+                    <button className={styles.aiMore} aria-label="Mais opções"><Icon name="more" /></button><img src="/task-ai-calendar.jpg" alt="Visita agendada" /><span>AGENDA</span>
+                    <h3>Visita agendada<br/>sem confirmação</h3><p>Hoje às 15:00.</p><button className={styles.aiCta}>Ver visitas <b>→</b></button>
+                  </article>
+                </div>
+
+                <nav className={styles.aiShortcuts} aria-label="Atalhos do assistente">
+                  <button type="button"><i className={styles.shortcutPurple}><Icon name="task" /></i><span>Criar tarefa rápida</span><b>›</b></button>
+                  <button type="button"><i className={styles.shortcutBlue}><Icon name="automation" /></i><span>Automatizar follow-ups</span><b>›</b></button>
+                  <button type="button"><i className={styles.shortcutOrange}><Icon name="chart" /></i><span>Relatório de atividades</span><b>›</b></button>
+                  <button type="button"><i className={styles.shortcutPurple}><Icon name="spark" /></i><span>Dicas de produtividade</span><b>›</b></button>
+                </nav>
+              </div>
+
+              <footer className={styles.aiActions}>
+                <button type="button"><i className={styles.actionBlue}><Icon name="phone" /></i> Ligação rápida</button>
+                <button type="button"><i className={styles.actionGreen}><Icon name="whatsapp" /></i> WhatsApp</button>
+                <button type="button"><i className={styles.actionPurple}><Icon name="mail" /></i> E-mail</button>
+                <button type="button"><i className={styles.actionBlue}><Icon name="calendar" /></i> Agendar</button>
+                <button type="button"><i className={styles.actionOrange}><Icon name="people" /></i> Nova reunião</button>
+                <button type="button"><i className={styles.actionPurple}><Icon name="attachment" /></i> Enviar anexo</button>
+                <button type="button" aria-label="Mais ações"><Icon name="chevron" /></button>
+              </footer>
+            </>}
+          </div>
         </section>
       </section>
 

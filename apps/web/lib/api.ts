@@ -8,9 +8,33 @@ const API_URL = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].incl
   : process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /**
+   * Mensagem de negócio devolvida pelo corpo da resposta (ex.: NestJS
+   * BadRequestException tem { message: "..." }) - undefined quando o corpo
+   * não é JSON ou não tem esse campo. Sem isso, o front-end só sabia dizer
+   * "falhou" para QUALQUER rejeição da API, mesmo quando o backend já
+   * explica exatamente o motivo (regra de negócio violada, permissão
+   * faltando etc.) - obrigando cada tela a reinventar uma mensagem genérica
+   * por conta própria.
+   */
+  constructor(public status: number, message: string, public backendMessage?: string) {
     super(message);
   }
+}
+
+async function extrairMensagemDoCorpo(resposta: Response): Promise<string | undefined> {
+  try {
+    // clone(): o corpo de uma Response só pode ser lido uma vez: sem clonar,
+    // um chamador que também tentasse ler resposta.json()/text() depois
+    // (ou o log de erro do navegador) veria o stream já consumido.
+    const corpo = await resposta.clone().json();
+    if (typeof corpo?.message === 'string') return corpo.message;
+    if (Array.isArray(corpo?.message)) return corpo.message.join(' ');
+  } catch {
+    // Corpo ausente ou não é JSON (ex.: erro 5xx cru de infraestrutura) -
+    // segue sem mensagem específica, o chamador cai no texto genérico.
+  }
+  return undefined;
 }
 
 // Deduplica renovações concorrentes: se várias chamadas de apiFetch levam
@@ -67,7 +91,7 @@ function requisitar(path: string, init: RequestInit | undefined, token: string |
 
 async function paraResultado<T>(resposta: Response, path: string): Promise<T> {
   if (!resposta.ok) {
-    throw new ApiError(resposta.status, `Falha na chamada a ${path} (HTTP ${resposta.status}).`);
+    throw new ApiError(resposta.status, `Falha na chamada a ${path} (HTTP ${resposta.status}).`, await extrairMensagemDoCorpo(resposta));
   }
   if (resposta.status === 204) {
     return undefined as T;
@@ -125,7 +149,7 @@ export async function apiFetchBlob(path: string): Promise<Blob | null> {
     return null;
   }
   if (!resposta.ok) {
-    throw new ApiError(resposta.status, `Falha na chamada a ${path} (HTTP ${resposta.status}).`);
+    throw new ApiError(resposta.status, `Falha na chamada a ${path} (HTTP ${resposta.status}).`, await extrairMensagemDoCorpo(resposta));
   }
   return resposta.blob();
 }
