@@ -159,10 +159,10 @@ export default function TarefasPage() {
   if (!sessao) return null;
 
   const counters = [
-    { label: 'Para hoje', value: String(Math.max(6, pendentes.length)).padStart(2, '0'), note: '2 prioritárias', icon: 'calendar' as const, tone: 'blue' },
-    { label: 'Atrasadas', value: '02', note: 'Requer atenção', icon: 'warning' as const, tone: 'red' },
-    { label: 'Próximas', value: '11', note: 'Esta semana', icon: 'calendar' as const, tone: 'violet' },
-    { label: 'Concluídas', value: concluidas.length ? `${Math.round((concluidas.length / tarefasVisuais.length) * 100)}%` : '87%', note: '+8% vs semana passada', icon: 'check' as const, tone: 'green' },
+    { label: 'Para hoje', value: String(Math.max(6, pendentes.length)).padStart(2, '0'), note: '2 prioritárias', context: 'Agenda do dia', icon: 'calendar' as const, tone: 'blue', points: [26, 42, 34, 58, 45, 62, 51, 66, 54, 72, 61, 78, 70, 82, 68, 76] },
+    { label: 'Atrasadas', value: '02', note: 'Requer atenção', context: '2 vencidas', icon: 'warning' as const, tone: 'red', points: [34, 58, 47, 70, 62, 39, 55, 43, 68, 74, 63, 80, 72, 59, 76, 66] },
+    { label: 'Próximas', value: '11', note: 'Esta semana', context: 'Até domingo', icon: 'calendar' as const, tone: 'violet', points: [28, 48, 39, 62, 44, 51, 36, 46, 55, 72, 67, 81, 76, 84, 70, 79] },
+    { label: 'Concluídas', value: concluidas.length ? `${Math.round((concluidas.length / tarefasVisuais.length) * 100)}%` : '87%', note: '↑ 8%', context: 'vs semana passada', icon: 'check' as const, tone: 'green', points: [24, 36, 31, 48, 42, 57, 49, 62, 55, 69, 61, 76, 68, 82, 73, 88] },
   ];
 
   const filtros: { id: Filtro; label: string; count?: number }[] = [
@@ -192,8 +192,15 @@ export default function TarefasPage() {
 
         <section className={styles.metrics} aria-label="Resumo das tarefas">
           {counters.map((counter) => <article key={counter.label} className={`${styles.metric} ${styles[counter.tone]}`}>
-            <div className={styles.metricHead}><b>{counter.label} <span>ⓘ</span></b><i><Icon name={counter.icon} /></i></div>
-            <strong>{counter.value}</strong><small>{counter.note}</small><span className={styles.sparkline} aria-hidden="true" />
+            <header className={styles.metricHead}>
+              <div><span className={styles.metricLabel}>{counter.label}</span><button type="button" aria-label={`Informações sobre ${counter.label}`} title={counter.context}>i</button></div>
+              <span className={styles.metricIcon}><Icon name={counter.icon} /></span>
+            </header>
+            <strong className={styles.metricValue}>{counter.value}</strong>
+            <footer className={styles.metricFooter}>
+              <div className={styles.metricCaption}><span>{counter.note}</span><small>{counter.context}</small></div>
+              <div className={styles.sparkline} aria-hidden="true">{counter.points.map((point, index) => <i key={index} style={{ height: `${point}%` }} />)}</div>
+            </footer>
           </article>)}
         </section>
 
