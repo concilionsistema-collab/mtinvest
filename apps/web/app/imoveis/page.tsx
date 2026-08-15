@@ -1,10 +1,21 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import type { Imovel, ImovelFinalidade, Unidade } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
-import { MapLibreSalesMap } from '../../components/maplibre-sales-map';
 import { apiFetch } from '../../lib/api';
+
+// Carregado sob demanda (ssr:false): o MapLibre GL sozinho responde por
+// ~270kB do bundle desta pagina (WebGL + parser de vetor/tiles) - sem isso,
+// esse peso todo bloqueava o primeiro carregamento da tela inteira de
+// Imoveis (KPIs, lista, filtros) so pra renderizar um mapa que nem esta
+// acima da dobra. Tambem precisa ser client-only porque maplibre-gl usa
+// WebGL/DOM, que nao existe durante o server-side render do Next.
+const MapLibreSalesMap = dynamic(
+  () => import('../../components/maplibre-sales-map').then((modulo) => modulo.MapLibreSalesMap),
+  { ssr: false, loading: () => <div className="property-map-loading">Carregando mapa…</div> },
+);
 
 const propertyMetrics = [
   ['\uE821', 'Total de Imóveis', '356', 'Ver todos', 'purple'],
