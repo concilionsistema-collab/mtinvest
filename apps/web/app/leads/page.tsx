@@ -1,9 +1,9 @@
 'use client';
 
 import { CSSProperties, DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
-import type { CapturarLeadResultado, ImovelFinalidade, Lead, Unidade, Usuario } from '@crm/shared';
+import type { CapturarLeadResultado, Imovel, ImovelFinalidade, Lead, Oportunidade, OportunidadeEstado, Pessoa, Unidade, Usuario } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, ApiError } from '../../lib/api';
 
 const leadMetrics = [
   ['\uE77B', 'Leads Totais', '1.248', '18% vs mês anterior', 'purple'],
@@ -14,41 +14,72 @@ const leadMetrics = [
   ['\uE73E', 'Convertidos (Mês)', '28', '27% vs mês anterior', 'purple'],
 ] as const;
 
-type PipelineCard = [name: string, interest: string, value: string, age: string, initials: string];
-type PipelineColumn = { title: string; count: number; total: string; tone: string; more: number; cards: PipelineCard[] };
-
-const pipelineColumns: PipelineColumn[] = [
-  { title: 'Novo Lead', count: 286, total: 'R$ 1.245.000', tone: 'purple', more: 82, cards: [
-    ['Carlos Alberto', 'Apartamento 2 dorm.', 'R$ 450.000', 'Hoje', 'CA'],
-    ['Mariana Oliveira', 'Casa em condomínio', 'R$ 780.000', 'Hoje', 'MO'],
-    ['Lucas Ferreira', 'Studio', 'R$ 280.000', '1d', 'LF'],
-    ['Fernanda Lima', 'Cobertura', 'R$ 980.000', '2d', 'FL'],
-  ]},
-  { title: 'Qualificado', count: 256, total: 'R$ 2.850.000', tone: 'blue', more: 76, cards: [
-    ['Bruno Santos', 'Apartamento 3 dorm.', 'R$ 650.000', '1d', 'BS'],
-    ['Juliana Costa', 'Casa térrea', 'R$ 1.200.000', '1d', 'JC'],
-    ['Ricardo Almeida', 'Cobertura duplex', 'R$ 1.450.000', '2d', 'RA'],
-    ['Patrícia Gomes', 'Apartamento 2 dorm.', 'R$ 550.000', '2d', 'PG'],
-  ]},
-  { title: 'Em Negociação', count: 312, total: 'R$ 4.580.000', tone: 'orange', more: 92, cards: [
-    ['Ana Paula Silva', 'Apartamento 3 dorm.', 'R$ 850.000', '2d', 'AS'],
-    ['Thiago Martins', 'Casa em condomínio', 'R$ 1.750.000', '3d', 'TM'],
-    ['Gabriela Souza', 'Cobertura vista mar', 'R$ 2.200.000', '3d', 'GS'],
-    ['Rafael Pereira', 'Apartamento 2 dorm.', 'R$ 680.000', '4d', 'RP'],
-  ]},
-  { title: 'Proposta Enviada', count: 128, total: 'R$ 2.350.000', tone: 'cyan', more: 92, cards: [
-    ['Daniel Carvalho', 'Apartamento 3 dorm.', 'R$ 720.000', '1d', 'DC'],
-    ['Camila Rocha', 'Casa térrea', 'R$ 1.300.000', '2d', 'CR'],
-    ['Felipe Andrade', 'Cobertura duplex', 'R$ 2.100.000', '2d', 'FA'],
-    ['Beatriz Lima', 'Apartamento 2 dorm.', 'R$ 450.000', '3d', 'BL'],
-  ]},
-  { title: 'Ganho', count: 28, total: 'R$ 850.000', tone: 'green', more: 12, cards: [
-    ['Amanda Dias', 'Apartamento 2 dorm.', 'R$ 450.000', '1d', 'AD'],
-    ['João Victor', 'Studio', 'R$ 280.000', '1d', 'JV'],
-    ['Simone Ribeiro', 'Casa em condomínio', 'R$ 1.250.000', '1d', 'SR'],
-    ['Eduardo Freitas', 'Apartamento 3 dorm.', 'R$ 750.000', '2d', 'EF'],
-  ]},
+// Pipeline conectado a dados reais (GET /oportunidades) - ver
+// apps/api/src/modules/oportunidades. ESTADOS_OPORTUNIDADE espelha a ordem
+// de ART-009, secao 8.1; TRANSICOES_VALIDAS espelha
+// OportunidadesService.TRANSICOES_VALIDAS (backend nao expoe isso via API,
+// entao fica duplicado aqui de proposito - so pra a UI nao deixar arrastar/
+// selecionar um destino que o servidor certamente vai rejeitar; o servidor
+// continua sendo a fonte de verdade, revalida tudo de novo).
+const ESTADOS_OPORTUNIDADE: { estado: OportunidadeEstado; label: string; tone: string }[] = [
+  { estado: 'QUALIFICACAO', label: 'Qualificação', tone: 'purple' },
+  { estado: 'VISITA_AGENDADA', label: 'Visita Agendada', tone: 'blue' },
+  { estado: 'VISITA_CONFIRMADA', label: 'Visita Confirmada', tone: 'blue' },
+  { estado: 'VISITA_REALIZADA', label: 'Visita Realizada', tone: 'cyan' },
+  { estado: 'PROPOSTA_ENVIADA', label: 'Proposta Enviada', tone: 'orange' },
+  { estado: 'EM_CONTRAPROPOSTA', label: 'Em Contraproposta', tone: 'orange' },
+  { estado: 'RESERVA', label: 'Reserva', tone: 'gold' },
+  { estado: 'DOCUMENTACAO_CONCLUIDA', label: 'Documentação', tone: 'cyan' },
+  { estado: 'FECHADA', label: 'Fechada', tone: 'green' },
+  { estado: 'PERDIDA', label: 'Perdida', tone: 'red' },
 ];
+
+const TRANSICOES_VALIDAS: Record<OportunidadeEstado, OportunidadeEstado[]> = {
+  QUALIFICACAO: ['VISITA_AGENDADA', 'PROPOSTA_ENVIADA', 'PERDIDA'],
+  VISITA_AGENDADA: ['VISITA_CONFIRMADA', 'PERDIDA'],
+  VISITA_CONFIRMADA: ['VISITA_REALIZADA', 'PERDIDA'],
+  VISITA_REALIZADA: ['PROPOSTA_ENVIADA', 'PERDIDA'],
+  PROPOSTA_ENVIADA: ['EM_CONTRAPROPOSTA', 'RESERVA', 'PERDIDA'],
+  EM_CONTRAPROPOSTA: ['EM_CONTRAPROPOSTA', 'RESERVA', 'PERDIDA'],
+  RESERVA: ['DOCUMENTACAO_CONCLUIDA', 'PERDIDA'],
+  DOCUMENTACAO_CONCLUIDA: ['FECHADA'],
+  FECHADA: [],
+  PERDIDA: [],
+};
+
+function infoEstado(estado: OportunidadeEstado) {
+  return ESTADOS_OPORTUNIDADE.find((item) => item.estado === estado) ?? ESTADOS_OPORTUNIDADE[0];
+}
+
+const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+function formatarValor(valor: number | null): string {
+  return valor != null ? formatadorMoeda.format(valor) : 'Sem valor definido';
+}
+
+function formatarIdade(criadoEmIso: string): string {
+  const dias = Math.floor((Date.now() - new Date(criadoEmIso).getTime()) / 86_400_000);
+  if (dias <= 0) return 'Hoje';
+  if (dias === 1) return '1d';
+  return `${dias}d`;
+}
+
+// Card do funil = uma Oportunidade (lead + imovel), com nome/interesse/valor
+// ja resolvidos a partir de Pessoa/Imovel (a Oportunidade em si so guarda os
+// ids, ver packages/shared/src/oportunidade.ts).
+interface CartaoOportunidade {
+  id: string;
+  nome: string;
+  interesse: string;
+  valor: number | null;
+  criadoEm: string;
+  estado: OportunidadeEstado;
+  iniciais: string;
+}
+
+function iniciaisDe(nome: string): string {
+  const partes = nome.trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? partes[0]?.[1] ?? '')).toUpperCase();
+}
 
 type PreferenciasFunil = { ordem: string[]; ocultas: string[] };
 const CHAVE_PREFERENCIAS_FUNIL = 'concilion-crm-funil-preferencias';
@@ -110,14 +141,18 @@ export default function LeadsPage() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [imoveis, setImoveis] = useState<Imovel[]>([]);
+  const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
   const [modalAberto, setModalAberto] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
-  const [pipeline, setPipeline] = useState<PipelineColumn[]>(() => pipelineColumns.map((column) => ({ ...column, cards: column.cards.map((card) => [...card]) as PipelineCard[] })));
-  const [leadArrastado, setLeadArrastado] = useState<string | null>(null);
-  const titulosPadraoPipeline = useMemo(() => pipelineColumns.map((coluna) => coluna.title), []);
+  const [oportunidadeArrastada, setOportunidadeArrastada] = useState<string | null>(null);
+  const [movendoId, setMovendoId] = useState<string | null>(null);
+  const [detalheOportunidadeId, setDetalheOportunidadeId] = useState<string | null>(null);
+  const titulosPadraoPipeline = useMemo(() => ESTADOS_OPORTUNIDADE.map((item) => item.label), []);
   const [preferenciasFunil, setPreferenciasFunil] = useState<PreferenciasFunil>(() => carregarPreferenciasFunil(titulosPadraoPipeline));
   const [visualizacaoPipeline, setVisualizacaoPipeline] = useState<'colunas' | 'lista'>('colunas');
   const [personalizarAberto, setPersonalizarAberto] = useState(false);
@@ -131,15 +166,60 @@ export default function LeadsPage() {
 
   async function carregarDados() {
     try {
-      const [listaUnidades, listaUsuarios, listaLeads] = await Promise.all([
+      const [listaUnidades, listaUsuarios, listaLeads, listaPessoas, listaImoveis, listaOportunidades] = await Promise.all([
         apiFetch<Unidade[]>('/unidades'), apiFetch<Usuario[]>('/usuarios'), apiFetch<Lead[]>('/leads'),
+        apiFetch<Pessoa[]>('/pessoas'), apiFetch<Imovel[]>('/imoveis'), apiFetch<Oportunidade[]>('/oportunidades'),
       ]);
       setUnidades(listaUnidades); setUsuarios(listaUsuarios); setLeads(listaLeads);
+      setPessoas(listaPessoas); setImoveis(listaImoveis); setOportunidades(listaOportunidades);
       if (listaUnidades[0]) setUnidadeId((atual) => atual || listaUnidades[0].id);
     } catch {
       setErro('Os dados demonstrativos estão visíveis, mas a API não respondeu para operações em tempo real.');
     }
   }
+
+  // Card real de cada Oportunidade: resolve nome (via Lead -> Pessoa) e
+  // interesse/valor (via Imovel). Oportunidade orfa (lead ou imovel removido)
+  // e descartada do funil - nao ha o que mostrar sem esses dados.
+  const cartoesPorEstado = useMemo(() => {
+    const porEstado = new Map<OportunidadeEstado, CartaoOportunidade[]>();
+    for (const oportunidade of oportunidades) {
+      const lead = leads.find((item) => item.id === oportunidade.leadId);
+      const pessoa = lead ? pessoas.find((item) => item.id === lead.pessoaId) : undefined;
+      const imovel = imoveis.find((item) => item.id === oportunidade.imovelId);
+      if (!pessoa || !imovel) continue;
+      const cartao: CartaoOportunidade = {
+        id: oportunidade.id,
+        nome: pessoa.nome,
+        interesse: imovel.enderecoResumo,
+        valor: imovel.valorAnunciado,
+        criadoEm: oportunidade.criadoEm,
+        estado: oportunidade.estado,
+        iniciais: iniciaisDe(pessoa.nome),
+      };
+      const lista = porEstado.get(oportunidade.estado) ?? [];
+      lista.push(cartao);
+      porEstado.set(oportunidade.estado, lista);
+    }
+    return porEstado;
+  }, [oportunidades, leads, pessoas, imoveis]);
+
+  const colunasPipeline = useMemo(
+    () => ESTADOS_OPORTUNIDADE.map(({ estado, label, tone }) => {
+      const cartoes = cartoesPorEstado.get(estado) ?? [];
+      return { estado, title: label, tone, cartoes, total: cartoes.reduce((soma, item) => soma + (item.valor ?? 0), 0) };
+    }),
+    [cartoesPorEstado],
+  );
+
+  const detalheOportunidade = useMemo(() => {
+    if (!detalheOportunidadeId) return null;
+    for (const coluna of colunasPipeline) {
+      const achado = coluna.cartoes.find((item) => item.id === detalheOportunidadeId);
+      if (achado) return achado;
+    }
+    return null;
+  }, [detalheOportunidadeId, colunasPipeline]);
 
   useEffect(() => { if (sessao) void carregarDados(); }, [sessao?.tenantId]);
   useEffect(() => {
