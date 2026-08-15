@@ -1,10 +1,18 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Tarefa } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
 import { apiFetch, ApiError } from '../../lib/api';
 import styles from './tarefas.module.css';
+
+// Sugestoes do CONCI (URGENTE/IMPORTANTE/AGENDA) nao vem de nenhuma analise
+// real - nao existe modulo de IA nem endpoint de "insights" no backend hoje.
+// EM_BREVE cobre os botoes que dependeriam disso (automacao, dicas,
+// configuracao do assistente) - melhor avisar claramente que ainda nao
+// existe do que o botao nao fazer nada (ou pior, fingir que fez).
+const AVISO_EM_BREVE = 'Esse recurso ainda não está disponível — em breve.';
 
 type Filtro = 'todas' | 'hoje' | 'atrasadas' | 'amanha' | 'proximas' | 'concluidas';
 type VisualTarefa = Tarefa & {
@@ -73,17 +81,27 @@ function enriquecerTarefa(tarefa: Tarefa, indice: number): VisualTarefa {
 
 export default function TarefasPage() {
   const { sessao } = useAuth();
+  const router = useRouter();
   const [titulo, setTitulo] = useState('');
   const [data, setData] = useState(() => new Date().toISOString().slice(0, 10));
   const [hora, setHora] = useState('14:30');
   const [tarefas, setTarefas] = useState<Tarefa[] | null>(null);
   const [demoTasks, setDemoTasks] = useState(DEMO_TASKS);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('hoje');
   const [selecionadaId, setSelecionadaId] = useState<string>('demo-1');
   const [detalhesAbertos, setDetalhesAbertos] = useState(true);
   const [assistenteAberto, setAssistenteAberto] = useState(true);
+  const [sugestoesOcultas, setSugestoesOcultas] = useState<Set<'urgente' | 'importante' | 'agenda'>>(new Set());
+  const tituloInputRef = useRef<HTMLInputElement>(null);
+
+  function focarCriacaoDeTarefa(tituloSugerido?: string) {
+    if (tituloSugerido) setTitulo(tituloSugerido);
+    tituloInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    tituloInputRef.current?.focus();
+  }
 
   async function carregar() {
     try {
@@ -190,7 +208,7 @@ export default function TarefasPage() {
           </div>
         </header>
 
-        {erro && <div className={styles.notice} role="status">{erro}</div>}
+        {(erro || aviso) && <div className={styles.notice} role="status">{erro ?? aviso}<button type="button" className={styles.noticeClose} onClick={() => { setErro(null); setAviso(null); }} aria-label="Fechar aviso">×</button></div>}
 
         <section className={styles.metrics} aria-label="Resumo das tarefas">
           {counters.map((counter) => <article key={counter.label} className={`${styles.metric} ${styles[counter.tone]}`}>
@@ -208,7 +226,7 @@ export default function TarefasPage() {
 
         <form className={styles.quickCreate} onSubmit={criar}>
           <div className={styles.createMain}>
-            <label className={styles.taskInput}><Icon name="plus" /><input aria-label="Título da tarefa" value={titulo} onChange={(e) => setTitulo(e.target.value)} required placeholder="O que precisa ser feito?" /></label>
+            <label className={styles.taskInput}><Icon name="plus" /><input ref={tituloInputRef} aria-label="Título da tarefa" value={titulo} onChange={(e) => setTitulo(e.target.value)} required placeholder="O que precisa ser feito?" /></label>
             <label className={styles.dateInput}><Icon name="calendar" /><input aria-label="Data da tarefa" type="date" value={data} onChange={(e) => setData(e.target.value)} /></label>
             <label className={styles.timeInput}><Icon name="clock" /><input aria-label="Hora da tarefa" type="time" value={hora} onChange={(e) => setHora(e.target.value)} /></label>
             <button className={styles.createButton} disabled={salvando}><Icon name="plus" />{salvando ? 'Criando...' : 'Criar tarefa'}</button>
@@ -255,42 +273,42 @@ export default function TarefasPage() {
           <div className={styles.aiBody}>
             <header className={styles.aiHeader}>
               <h2><Icon name="spark" /> Sugestões para você</h2>
-              <div><button type="button"><Icon name="settings" /> Configurar assistente</button><button type="button" aria-label={assistenteAberto ? 'Recolher assistente' : 'Expandir assistente'} onClick={() => setAssistenteAberto((aberto) => !aberto)}><Icon name={assistenteAberto ? 'up' : 'chevron'} /></button></div>
+              <div><button type="button" onClick={() => setAviso(AVISO_EM_BREVE)}><Icon name="settings" /> Configurar assistente</button><button type="button" aria-label={assistenteAberto ? 'Recolher assistente' : 'Expandir assistente'} onClick={() => setAssistenteAberto((aberto) => !aberto)}><Icon name={assistenteAberto ? 'up' : 'chevron'} /></button></div>
             </header>
 
             {assistenteAberto && <>
               <div className={styles.aiMain}>
                 <div className={styles.aiCards}>
-                  <article className={`${styles.aiCard} ${styles.aiCardUrgent}`}>
-                    <button className={styles.aiMore} aria-label="Mais opções"><Icon name="more" /></button><img src="/task-ai-fire.jpg" alt="Alerta de leads quentes" /><span>URGENTE</span>
-                    <h3>3 leads quentes<br/>sem follow-up</h3><p>Há mais de 48h sem contato.</p><button className={styles.aiCta}>Ver leads <b>→</b></button>
-                  </article>
-                  <article className={`${styles.aiCard} ${styles.aiCardImportant}`}>
-                    <button className={styles.aiMore} aria-label="Mais opções"><Icon name="more" /></button><img src="/task-ai-document.jpg" alt="Proposta importante" /><span>IMPORTANTE</span>
-                    <h3>Proposta da<br/>Ana Paula</h3><p>Vence amanhã.</p><button className={styles.aiCta}>Ver proposta <b>→</b></button>
-                  </article>
-                  <article className={`${styles.aiCard} ${styles.aiCardAgenda}`}>
-                    <button className={styles.aiMore} aria-label="Mais opções"><Icon name="more" /></button><img src="/task-ai-calendar.jpg" alt="Visita agendada" /><span>AGENDA</span>
-                    <h3>Visita agendada<br/>sem confirmação</h3><p>Hoje às 15:00.</p><button className={styles.aiCta}>Ver visitas <b>→</b></button>
-                  </article>
+                  {!sugestoesOcultas.has('urgente') && <article className={`${styles.aiCard} ${styles.aiCardUrgent}`}>
+                    <button className={styles.aiMore} aria-label="Dispensar sugestão" onClick={() => setSugestoesOcultas((atuais) => new Set(atuais).add('urgente'))}><Icon name="more" /></button><img src="/task-ai-fire.jpg" alt="Alerta de leads quentes" /><span>URGENTE</span>
+                    <h3>3 leads quentes<br/>sem follow-up</h3><p>Há mais de 48h sem contato.</p><button className={styles.aiCta} onClick={() => router.push('/leads')}>Ver leads <b>→</b></button>
+                  </article>}
+                  {!sugestoesOcultas.has('importante') && <article className={`${styles.aiCard} ${styles.aiCardImportant}`}>
+                    <button className={styles.aiMore} aria-label="Dispensar sugestão" onClick={() => setSugestoesOcultas((atuais) => new Set(atuais).add('importante'))}><Icon name="more" /></button><img src="/task-ai-document.jpg" alt="Proposta importante" /><span>IMPORTANTE</span>
+                    <h3>Proposta da<br/>Ana Paula</h3><p>Vence amanhã.</p><button className={styles.aiCta} onClick={() => router.push('/propostas')}>Ver proposta <b>→</b></button>
+                  </article>}
+                  {!sugestoesOcultas.has('agenda') && <article className={`${styles.aiCard} ${styles.aiCardAgenda}`}>
+                    <button className={styles.aiMore} aria-label="Dispensar sugestão" onClick={() => setSugestoesOcultas((atuais) => new Set(atuais).add('agenda'))}><Icon name="more" /></button><img src="/task-ai-calendar.jpg" alt="Visita agendada" /><span>AGENDA</span>
+                    <h3>Visita agendada<br/>sem confirmação</h3><p>Hoje às 15:00.</p><button className={styles.aiCta} onClick={() => router.push('/visitas')}>Ver visitas <b>→</b></button>
+                  </article>}
                 </div>
 
                 <nav className={styles.aiShortcuts} aria-label="Atalhos do assistente">
-                  <button type="button"><i className={styles.shortcutPurple}><Icon name="task" /></i><span>Criar tarefa rápida</span><b>›</b></button>
-                  <button type="button"><i className={styles.shortcutBlue}><Icon name="automation" /></i><span>Automatizar follow-ups</span><b>›</b></button>
-                  <button type="button"><i className={styles.shortcutOrange}><Icon name="chart" /></i><span>Relatório de atividades</span><b>›</b></button>
-                  <button type="button"><i className={styles.shortcutPurple}><Icon name="spark" /></i><span>Dicas de produtividade</span><b>›</b></button>
+                  <button type="button" onClick={() => focarCriacaoDeTarefa()}><i className={styles.shortcutPurple}><Icon name="task" /></i><span>Criar tarefa rápida</span><b>›</b></button>
+                  <button type="button" onClick={() => setAviso(AVISO_EM_BREVE)}><i className={styles.shortcutBlue}><Icon name="automation" /></i><span>Automatizar follow-ups</span><b>›</b></button>
+                  <button type="button" onClick={() => router.push('/relatorios')}><i className={styles.shortcutOrange}><Icon name="chart" /></i><span>Relatório de atividades</span><b>›</b></button>
+                  <button type="button" onClick={() => setAviso(AVISO_EM_BREVE)}><i className={styles.shortcutPurple}><Icon name="spark" /></i><span>Dicas de produtividade</span><b>›</b></button>
                 </nav>
               </div>
 
               <footer className={styles.aiActions}>
-                <button type="button"><i className={styles.actionBlue}><Icon name="phone" /></i> Ligação rápida</button>
-                <button type="button"><i className={styles.actionGreen}><Icon name="whatsapp" /></i> WhatsApp</button>
-                <button type="button"><i className={styles.actionPurple}><Icon name="mail" /></i> E-mail</button>
-                <button type="button"><i className={styles.actionBlue}><Icon name="calendar" /></i> Agendar</button>
-                <button type="button"><i className={styles.actionOrange}><Icon name="people" /></i> Nova reunião</button>
-                <button type="button"><i className={styles.actionPurple}><Icon name="attachment" /></i> Enviar anexo</button>
-                <button type="button" aria-label="Mais ações"><Icon name="chevron" /></button>
+                <button type="button" onClick={() => setAviso(AVISO_EM_BREVE)}><i className={styles.actionBlue}><Icon name="phone" /></i> Ligação rápida</button>
+                <button type="button" onClick={() => setAviso(AVISO_EM_BREVE)}><i className={styles.actionGreen}><Icon name="whatsapp" /></i> WhatsApp</button>
+                <button type="button" onClick={() => setAviso(AVISO_EM_BREVE)}><i className={styles.actionPurple}><Icon name="mail" /></i> E-mail</button>
+                <button type="button" onClick={() => router.push('/visitas')}><i className={styles.actionBlue}><Icon name="calendar" /></i> Agendar</button>
+                <button type="button" onClick={() => focarCriacaoDeTarefa('Reunião com ')}><i className={styles.actionOrange}><Icon name="people" /></i> Nova reunião</button>
+                <button type="button" onClick={() => setAviso(AVISO_EM_BREVE)}><i className={styles.actionPurple}><Icon name="attachment" /></i> Enviar anexo</button>
+                <button type="button" aria-label="Mais ações" onClick={() => setAviso(AVISO_EM_BREVE)}><Icon name="chevron" /></button>
               </footer>
             </>}
           </div>
