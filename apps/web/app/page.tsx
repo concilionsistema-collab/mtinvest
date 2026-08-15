@@ -7,7 +7,6 @@ import { useAuth } from '../components/auth-context';
 import { apiFetch } from '../lib/api';
 import { MapLibreSalesMap } from '../components/maplibre-sales-map';
 import { CompactSalesFunnel, PremiumSalesPerformance } from '../components/dashboard-sales-widgets';
-import { AIInsightsPanel } from '../components/ai-insights-panel';
 
 const ESTADOS_OPORTUNIDADE_ENCERRADOS = ['FECHADA', 'PERDIDA'];
 const ESTADOS_VISITA_AGENDADA = ['AGENDADA', 'CONFIRMADA'];
@@ -182,8 +181,6 @@ export default function DashboardPage() {
         {(metrics ?? []).map((metric) => <MetricCard metric={metric} key={metric.label} />)}
         {metrics === null && <p style={{ color: 'var(--muted)', fontSize: 12 }}>Carregando indicadores...</p>}
       </div>
-
-      <AIInsightsPanel />
 
       <div className="dashboard-row dashboard-row--top">
         <Panel title="Funil de Vendas" className="funnel-panel">
