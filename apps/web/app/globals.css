@@ -281,6 +281,17 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   bottom: -10px;
 }
 
+.avatar--joao{
+  overflow:hidden;
+  background-color:#111d2d;
+  background-image:url('/task-profile-sprite.jpg');
+  background-repeat:no-repeat;
+  background-size:200% 100%;
+  background-position:left center;
+  color:transparent;
+  text-shadow:none;
+}
+
 /* AI Commercial Assistant */
 .floating-ai{
   position:fixed;right:24px;bottom:24px;z-index:90;width:174px;height:62px;padding:7px 15px 7px 7px;
