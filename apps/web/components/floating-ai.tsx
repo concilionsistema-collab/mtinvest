@@ -63,17 +63,30 @@ export function FloatingAI() {
 
   return (
     <>
-      <div className="floating-ai" onClick={togglePanel} aria-label="Inteligência Comercial">
-        <span className="fluent ai-float-icon">&#xE823;</span>
-        <small>CION.ai</small>
-        <b>3</b>
-      </div>
+      <button
+        type="button"
+        className={`floating-ai ${isOpen ? "floating-ai--open" : ""}`}
+        onClick={togglePanel}
+        aria-label={isOpen ? "Fechar assistente CONCI" : "Abrir assistente CONCI"}
+        aria-controls="floating-ai-panel"
+        aria-expanded={isOpen}
+      >
+        <span className="floating-ai-avatar" aria-hidden="true">
+          <img src="/task-ai-assistant.jpg" alt="" />
+          <i />
+        </span>
+        <span className="floating-ai-copy">
+          <strong>CONCI</strong>
+          <small>Assistente IA</small>
+        </span>
+        <b aria-label="3 novas sugestões">3</b>
+      </button>
 
-      <div className={`floating-ai-panel ${isOpen ? "show" : ""}`}>
+      <div id="floating-ai-panel" className={`floating-ai-panel ${isOpen ? "show" : ""}`}>
         <div className="float-ai-head">
           <h3>
-            <div className="fluent ai-orb">&#xE823;</div>
-            Inteligência Comercial
+            <span className="ai-orb"><img src="/task-ai-assistant.jpg" alt="" /></span>
+            <span>CONCI<small>Inteligência Comercial</small></span>
           </h3>
           <button className="fluent close-btn" onClick={togglePanel}>&#xE711;</button>
         </div>
