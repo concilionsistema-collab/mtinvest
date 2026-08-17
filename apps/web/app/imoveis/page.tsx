@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import type { Imovel, ImovelFinalidade, Unidade } from '@crm/shared';
+import type { Imovel, ImovelFinalidade, Lead, Oportunidade, Unidade, Usuario } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
 import { apiFetch } from '../../lib/api';
 
@@ -17,82 +17,284 @@ const MapLibreSalesMap = dynamic(
   { ssr: false, loading: () => <div className="property-map-loading">Carregando mapa…</div> },
 );
 
-const propertyMetrics = [
-  ['\uE821', 'Total de Imóveis', '356', 'Ver todos', 'purple'],
-  ['\uE8FB', 'Disponíveis', '248', 'R$ 189.750.000', 'green'],
-  ['\uE81C', 'Em Negociação', '78', 'R$ 63.580.000', 'orange'],
-  ['\uE7EE', 'Reservados', '18', 'R$ 12.450.000', 'blue'],
-  ['\uE73E', 'Vendidos (Mês)', '30', 'R$ 25.680.000', 'green'],
-  ['\uE8C7', 'Valor Geral do Portfólio', 'R$ 291.460.000', 'Atualizado hoje, 09:30', 'purple'],
-] as const;
+type StatusImovel = 'DISPONIVEL' | 'NEGOCIACAO' | 'RESERVADO' | 'VENDIDO';
 
-const featuredProperties = [
-  { type:'Apartamento', neighborhood:'Vila Nova Conceição', value:'R$ 2.450.000', details:'120m² | 3 dorm. | 2 vagas', status:'Disponível', tone:'green', photo:1 },
-  { type:'Cobertura Duplex', neighborhood:'Itaim Bibi', value:'R$ 5.800.000', details:'280m² | 4 dorm. | 4 vagas', status:'Em Negociação', tone:'orange', photo:2 },
-  { type:'Casa em Condomínio', neighborhood:'Brooklin', value:'R$ 3.250.000', details:'250m² | 4 dorm. | 3 vagas', status:'Disponível', tone:'green', photo:3 },
-  { type:'Studio', neighborhood:'Moema', value:'R$ 450.000', details:'45m² | 1 dorm. | 1 vaga', status:'Disponível', tone:'green', photo:2 },
-] as const;
+const ESTADOS_RESERVA: string[] = ['RESERVA', 'DOCUMENTACAO_CONCLUIDA'];
+const ESTADOS_ENCERRADOS: string[] = ['FECHADA', 'PERDIDA'];
 
-const portfolioRows = [
-  {code:'AP-101',name:'Apartamento - 101',type:'Apartamento',location:'Vila Nova Conceição',area:'120 m²',bedrooms:3,parking:2,value:'R$ 2.450.000',status:'Disponível',tone:'green',broker:'João Corretor',initials:'JC',photo:1},
-  {code:'COB-201',name:'Cobertura Duplex - 201',type:'Cobertura',location:'Itaim Bibi',area:'280 m²',bedrooms:4,parking:4,value:'R$ 5.800.000',status:'Em Negociação',tone:'orange',broker:'Maria Silva',initials:'MS',photo:2},
-  {code:'CS-301',name:'Casa Térrea - 301',type:'Casa',location:'Campo Belo',area:'200 m²',bedrooms:3,parking:4,value:'R$ 1.850.000',status:'Disponível',tone:'green',broker:'Pedro Almeida',initials:'PA',photo:3},
-  {code:'ST-401',name:'Studio - 401',type:'Studio',location:'Moema',area:'45 m²',bedrooms:1,parking:1,value:'R$ 450.000',status:'Disponível',tone:'green',broker:'Ana Costa',initials:'AC',photo:2},
-  {code:'AP-501',name:'Apartamento - 501',type:'Apartamento',location:'Brooklin',area:'90 m²',bedrooms:2,parking:1,value:'R$ 850.000',status:'Reservado',tone:'purple',broker:'Lucas Pereira',initials:'LP',photo:1},
-] as const;
+const STATUS_INFO: Record<StatusImovel, { label: string; tone: string }> = {
+  DISPONIVEL: { label: 'Disponível', tone: 'green' },
+  NEGOCIACAO: { label: 'Em Negociação', tone: 'orange' },
+  RESERVADO: { label: 'Reservado', tone: 'purple' },
+  VENDIDO: { label: 'Vendido', tone: 'blue' },
+};
 
-const propertyTypes = [['Apartamentos',62,221,'purple'],['Casas',21,75,'cyan'],['Coberturas',9,32,'orange'],['Comerciais',5,18,'gold'],['Terrenos',3,10,'blue']] as const;
-const salesByType = [['Apartamento','R$ 15.850.000',62,'purple'],['Casa','R$ 5.200.000',20,'purple'],['Cobertura','R$ 2.850.000',11,'purple'],['Comercial','R$ 1.280.000',5,'orange'],['Terreno','R$ 500.000',2,'orange']] as const;
-const brokerSales = [['João Corretor','R$ 8.450.000',88,'JC'],['Maria Silva','R$ 6.250.000',72,'MS'],['Pedro Almeida','R$ 5.180.000',54,'PA'],['Ana Costa','R$ 3.800.000',38,'AC'],['Lucas Pereira','R$ 2.000.000',25,'LP']] as const;
+const NOMES_FINALIDADE: Record<ImovelFinalidade, string> = {
+  VENDA: 'Venda',
+  LOCACAO: 'Locação',
+  AMBOS: 'Venda e locação',
+};
 
-function PortfolioPhoto({ photo, className='' }: { photo:number; className?:string }) { return <span className={`portfolio-photo portfolio-photo--${photo} ${className}`} />; }
-function BrokerBadge({ initials, index=0 }: { initials:string; index?:number }) { return <i className={`portfolio-broker portfolio-broker--${(index%5)+1}`}>{initials}</i>; }
+const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+function formatarValor(valor: number | null): string {
+  return valor != null ? formatadorMoeda.format(valor) : 'Valor a definir';
+}
+
+function formatarIdade(criadoEmIso: string): string {
+  const dias = Math.floor((Date.now() - new Date(criadoEmIso).getTime()) / 86_400_000);
+  if (dias <= 0) return 'Hoje';
+  if (dias === 1) return 'Ontem';
+  return `${dias}d atrás`;
+}
+
+const INICIO_DO_MES = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+const INICIO_MES_ANTERIOR = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+
+/** Deriva um status de negociação por imóvel a partir de Oportunidade (Imovel em si não guarda status de venda). */
+function derivarStatus(imovelId: string, oportunidades: Oportunidade[]): StatusImovel {
+  const doImovel = oportunidades.filter((o) => o.imovelId === imovelId);
+  if (doImovel.some((o) => o.estado === 'FECHADA')) return 'VENDIDO';
+  const ativas = doImovel.filter((o) => !ESTADOS_ENCERRADOS.includes(o.estado));
+  if (ativas.some((o) => ESTADOS_RESERVA.includes(o.estado))) return 'RESERVADO';
+  if (ativas.length > 0) return 'NEGOCIACAO';
+  return 'DISPONIVEL';
+}
+
+function PortfolioPhoto({ photo, className = '' }: { photo: number; className?: string }) {
+  return <span className={`portfolio-photo portfolio-photo--${photo} ${className}`} />;
+}
 
 export default function ImoveisPage() {
   const { sessao } = useAuth();
-  const [unidades,setUnidades]=useState<Unidade[]>([]);
-  const [imoveis,setImoveis]=useState<Imovel[]>([]);
-  const [modalAberto,setModalAberto]=useState(false);
-  const [carregando,setCarregando]=useState(false);
-  const [erro,setErro]=useState<string|null>(null);
-  const [aviso,setAviso]=useState<string|null>(null);
-  const [busca,setBusca]=useState('');
-  const [unidadeProprietariaId,setUnidadeProprietariaId]=useState('');
-  const [finalidade,setFinalidade]=useState<ImovelFinalidade>('VENDA');
-  const [enderecoResumo,setEnderecoResumo]=useState('');
-  const [valorAnunciado,setValorAnunciado]=useState('');
-  const [percentualDesconto,setPercentualDesconto]=useState('');
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [imoveis, setImoveis] = useState<Imovel[]>([]);
+  const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [modalAberto, setModalAberto] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [busca, setBusca] = useState('');
+  const [filtroFinalidade, setFiltroFinalidade] = useState<'TODAS' | ImovelFinalidade>('TODAS');
+  const [filtroStatus, setFiltroStatus] = useState<'TODOS' | StatusImovel>('TODOS');
+  const [unidadeProprietariaId, setUnidadeProprietariaId] = useState('');
+  const [finalidade, setFinalidade] = useState<ImovelFinalidade>('VENDA');
+  const [enderecoResumo, setEnderecoResumo] = useState('');
+  const [valorAnunciado, setValorAnunciado] = useState('');
+  const [percentualDesconto, setPercentualDesconto] = useState('');
 
-  async function carregarDados(){try{const [listaUnidades,listaImoveis]=await Promise.all([apiFetch<Unidade[]>('/unidades'),apiFetch<Imovel[]>('/imoveis')]);setUnidades(listaUnidades);setImoveis(listaImoveis);if(listaUnidades[0])setUnidadeProprietariaId((atual)=>atual||listaUnidades[0].id);}catch{setErro('Os dados demonstrativos estão visíveis, mas a API não respondeu para operações em tempo real.');}}
-  useEffect(()=>{if(sessao)void carregarDados();},[sessao?.tenantId]);
-  useEffect(()=>{const abrir=()=>setModalAberto(window.location.hash==='#novo-imovel');abrir();window.addEventListener('hashchange',abrir);return()=>window.removeEventListener('hashchange',abrir);},[]);
-  useEffect(()=>{const abrirImovel=()=>{const hash=window.location.hash;const codigo=hash.startsWith('#imovel-')?hash.replace('#imovel-',''):'';setBusca(codigo);if(hash==='#lista-imoveis'||codigo)window.setTimeout(()=>document.querySelector('.property-table-card')?.scrollIntoView({behavior:'smooth',block:'start'}),80);};abrirImovel();window.addEventListener('hashchange',abrirImovel);return()=>window.removeEventListener('hashchange',abrirImovel);},[]);
+  async function carregarDados() {
+    try {
+      const [listaUnidades, listaImoveis, listaOportunidades, listaLeads, listaUsuarios] = await Promise.all([
+        apiFetch<Unidade[]>('/unidades'),
+        apiFetch<Imovel[]>('/imoveis'),
+        apiFetch<Oportunidade[]>('/oportunidades'),
+        apiFetch<Lead[]>('/leads'),
+        apiFetch<Usuario[]>('/usuarios'),
+      ]);
+      setUnidades(listaUnidades);
+      setImoveis(listaImoveis);
+      setOportunidades(listaOportunidades);
+      setLeads(listaLeads);
+      setUsuarios(listaUsuarios);
+      if (listaUnidades[0]) setUnidadeProprietariaId((atual) => atual || listaUnidades[0].id);
+    } catch {
+      setErro('Não foi possível carregar os imóveis. Tente novamente em instantes.');
+    }
+  }
+  useEffect(() => { if (sessao) void carregarDados(); }, [sessao?.tenantId]);
+  useEffect(() => { const abrir = () => setModalAberto(window.location.hash === '#novo-imovel'); abrir(); window.addEventListener('hashchange', abrir); return () => window.removeEventListener('hashchange', abrir); }, []);
+  useEffect(() => { const abrirImovel = () => { const hash = window.location.hash; const codigo = hash.startsWith('#imovel-') ? decodeURIComponent(hash.replace('#imovel-', '')) : ''; setBusca(codigo); if (hash === '#lista-imoveis' || codigo) window.setTimeout(() => document.querySelector('.property-table-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); }; abrirImovel(); window.addEventListener('hashchange', abrirImovel); return () => window.removeEventListener('hashchange', abrirImovel); }, []);
 
-  const rowsFiltradas=useMemo(()=>portfolioRows.filter((row)=>`${row.name} ${row.type} ${row.location} ${row.broker}`.toLowerCase().includes(busca.toLowerCase())),[busca]);
-  function fecharModal(){setModalAberto(false);if(typeof window!=='undefined'&&window.location.hash)window.history.replaceState(null,'','/imoveis');}
-  async function criarImovel(evento:FormEvent<HTMLFormElement>){evento.preventDefault();if(!unidadeProprietariaId){setErro('Cadastre uma unidade antes de captar um imóvel.');return;}setCarregando(true);setErro(null);setAviso(null);try{await apiFetch<Imovel>('/imoveis',{method:'POST',body:JSON.stringify({unidadeProprietariaId,finalidade,enderecoResumo,valorAnunciado:valorAnunciado?Number(valorAnunciado):undefined,percentualDescontoPreAutorizado:percentualDesconto?Number(percentualDesconto):undefined})});setEnderecoResumo('');setValorAnunciado('');setPercentualDesconto('');setAviso('Imóvel cadastrado com sucesso.');fecharModal();await carregarDados();}catch{setErro('Não foi possível cadastrar o imóvel. Verifique os dados e tente novamente.');}finally{setCarregando(false);}}
-  if(!sessao)return null;
+  const unidadePorId = useMemo(() => new Map(unidades.map((u) => [u.id, u.nomeFantasia])), [unidades]);
+  const statusPorImovel = useMemo(() => new Map(imoveis.map((i) => [i.id, derivarStatus(i.id, oportunidades)])), [imoveis, oportunidades]);
+
+  const kpis = useMemo(() => {
+    const grupos: Record<StatusImovel, { count: number; valor: number }> = {
+      DISPONIVEL: { count: 0, valor: 0 }, NEGOCIACAO: { count: 0, valor: 0 }, RESERVADO: { count: 0, valor: 0 }, VENDIDO: { count: 0, valor: 0 },
+    };
+    let valorTotal = 0;
+    for (const imovel of imoveis) {
+      const status = statusPorImovel.get(imovel.id) ?? 'DISPONIVEL';
+      grupos[status].count += 1;
+      grupos[status].valor += imovel.valorAnunciado ?? 0;
+      valorTotal += imovel.valorAnunciado ?? 0;
+    }
+    const vendidosNoMes = oportunidades.filter((o) => o.estado === 'FECHADA' && new Date(o.criadoEm) >= INICIO_DO_MES);
+    const valorVendidosNoMes = vendidosNoMes.reduce((soma, o) => soma + (imoveis.find((i) => i.id === o.imovelId)?.valorAnunciado ?? 0), 0);
+    return { grupos, valorTotal, vendidosNoMes: { count: vendidosNoMes.length, valor: valorVendidosNoMes } };
+  }, [imoveis, oportunidades, statusPorImovel]);
+
+  const tendenciaVendas = useMemo(() => {
+    const somaNoPeriodo = (inicio: Date, fim: Date | null) => oportunidades
+      .filter((o) => o.estado === 'FECHADA' && new Date(o.criadoEm) >= inicio && (fim === null || new Date(o.criadoEm) < fim))
+      .reduce((soma, o) => soma + (imoveis.find((i) => i.id === o.imovelId)?.valorAnunciado ?? 0), 0);
+    const atual = somaNoPeriodo(INICIO_DO_MES, null);
+    const anterior = somaNoPeriodo(INICIO_MES_ANTERIOR, INICIO_DO_MES);
+    const percentual = anterior > 0 ? ((atual - anterior) / anterior) * 100 : (atual > 0 ? 100 : null);
+    return { atual, percentual };
+  }, [oportunidades, imoveis]);
+
+  const vendasPorFinalidade = useMemo(() => {
+    const totais: Record<ImovelFinalidade, number> = { VENDA: 0, LOCACAO: 0, AMBOS: 0 };
+    for (const o of oportunidades) {
+      if (o.estado !== 'FECHADA' || new Date(o.criadoEm) < INICIO_DO_MES) continue;
+      const imovel = imoveis.find((i) => i.id === o.imovelId);
+      if (!imovel) continue;
+      totais[imovel.finalidade] += imovel.valorAnunciado ?? 0;
+    }
+    const total = totais.VENDA + totais.LOCACAO + totais.AMBOS || 1;
+    return (Object.keys(totais) as ImovelFinalidade[])
+      .map((f) => ({ finalidade: f, valor: totais[f], percentual: Math.round((totais[f] / total) * 100) }))
+      .filter((item) => item.valor > 0);
+  }, [oportunidades, imoveis]);
+
+  /** Oportunidade não tem campo de corretor - usa o responsavelUsuarioId do Lead de origem como proxy real (uma negociação só existe se o lead já tiver responsável). */
+  const vendasPorCorretor = useMemo(() => {
+    const porCorretor = new Map<string, { nome: string; valor: number }>();
+    for (const o of oportunidades) {
+      if (o.estado !== 'FECHADA' || new Date(o.criadoEm) < INICIO_DO_MES) continue;
+      const lead = leads.find((l) => l.id === o.leadId);
+      const corretor = lead?.responsavelUsuarioId ? usuarios.find((u) => u.id === lead.responsavelUsuarioId) : undefined;
+      if (!corretor) continue;
+      const imovel = imoveis.find((i) => i.id === o.imovelId);
+      const atual = porCorretor.get(corretor.id) ?? { nome: corretor.nome, valor: 0 };
+      atual.valor += imovel?.valorAnunciado ?? 0;
+      porCorretor.set(corretor.id, atual);
+    }
+    const lista = [...porCorretor.values()].sort((a, b) => b.valor - a.valor);
+    const maior = Math.max(...lista.map((c) => c.valor), 1);
+    return lista.slice(0, 5).map((c) => ({ ...c, percentual: Math.round((c.valor / maior) * 100) }));
+  }, [oportunidades, imoveis, leads, usuarios]);
+
+  const imoveisPorFinalidade = useMemo(() => {
+    const totais: Record<ImovelFinalidade, number> = { VENDA: 0, LOCACAO: 0, AMBOS: 0 };
+    for (const imovel of imoveis) totais[imovel.finalidade] += 1;
+    const total = imoveis.length || 1;
+    return (Object.keys(totais) as ImovelFinalidade[])
+      .map((f) => ({ finalidade: f, count: totais[f], percentual: Math.round((totais[f] / total) * 100) }))
+      .filter((item) => item.count > 0);
+  }, [imoveis]);
+
+  const imoveisEmDestaque = useMemo(
+    () => [...imoveis].filter((i) => i.valorAnunciado != null).sort((a, b) => (b.valorAnunciado ?? 0) - (a.valorAnunciado ?? 0)).slice(0, 4),
+    [imoveis],
+  );
+
+  const ultimosCadastrados = useMemo(
+    () => [...imoveis].sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()).slice(0, 4),
+    [imoveis],
+  );
+
+  const rowsFiltradas = useMemo(() => imoveis.filter((imovel) => {
+    const status = statusPorImovel.get(imovel.id) ?? 'DISPONIVEL';
+    const nomeUnidade = unidadePorId.get(imovel.unidadeProprietariaId) ?? '';
+    const buscaOk = `${imovel.enderecoResumo} ${nomeUnidade}`.toLowerCase().includes(busca.toLowerCase());
+    const finalidadeOk = filtroFinalidade === 'TODAS' || imovel.finalidade === filtroFinalidade;
+    const statusOk = filtroStatus === 'TODOS' || status === filtroStatus;
+    return buscaOk && finalidadeOk && statusOk;
+  }), [imoveis, busca, filtroFinalidade, filtroStatus, statusPorImovel, unidadePorId]);
+
+  function fecharModal() { setModalAberto(false); if (typeof window !== 'undefined' && window.location.hash) window.history.replaceState(null, '', '/imoveis'); }
+  function acaoIndisponivel() { setAviso('Visualização detalhada e edição de imóveis ainda não estão disponíveis nesta versão.'); }
+  async function criarImovel(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault();
+    if (!unidadeProprietariaId) { setErro('Cadastre uma unidade antes de captar um imóvel.'); return; }
+    setCarregando(true); setErro(null); setAviso(null);
+    try {
+      await apiFetch<Imovel>('/imoveis', { method: 'POST', body: JSON.stringify({ unidadeProprietariaId, finalidade, enderecoResumo, valorAnunciado: valorAnunciado ? Number(valorAnunciado) : undefined, percentualDescontoPreAutorizado: percentualDesconto ? Number(percentualDesconto) : undefined }) });
+      setEnderecoResumo(''); setValorAnunciado(''); setPercentualDesconto(''); setAviso('Imóvel cadastrado com sucesso.'); fecharModal(); await carregarDados();
+    } catch { setErro('Não foi possível cadastrar o imóvel. Verifique os dados e tente novamente.'); }
+    finally { setCarregando(false); }
+  }
+  if (!sessao) return null;
 
   return <main className="properties-page"><h1 className="sr-only">Imóveis</h1>
-    {(aviso||erro)&&<div className={`properties-toast ${erro?'properties-toast--error':''}`}>{erro??aviso}<button onClick={()=>{setErro(null);setAviso(null);}}>×</button></div>}
+    {(aviso || erro) && <div className={`properties-toast ${erro ? 'properties-toast--error' : ''}`}>{erro ?? aviso}<button onClick={() => { setErro(null); setAviso(null); }}>×</button></div>}
 
-    <section className="property-kpi-grid" aria-label="Indicadores do portfólio">{propertyMetrics.map(([icon,label,value,detail,tone],index)=><article className={`property-kpi property-kpi--${tone} ${index===5?'property-kpi--wide':''}`} key={label}><span className="property-kpi__icon fluent">{icon}</span><div><small>{label}</small><strong>{value}</strong><em>{detail}</em></div></article>)}</section>
+    <section className="property-kpi-grid" aria-label="Indicadores do portfólio">
+      <article className="property-kpi property-kpi--purple"><span className="property-kpi__icon fluent">&#xE821;</span><div><small>Total de Imóveis</small><strong>{imoveis.length}</strong><em>{unidades.length} unidade(s)</em></div></article>
+      <article className="property-kpi property-kpi--green"><span className="property-kpi__icon fluent">&#xE8FB;</span><div><small>Disponíveis</small><strong>{kpis.grupos.DISPONIVEL.count}</strong><em>{formatarValor(kpis.grupos.DISPONIVEL.valor)}</em></div></article>
+      <article className="property-kpi property-kpi--orange"><span className="property-kpi__icon fluent">&#xE81C;</span><div><small>Em Negociação</small><strong>{kpis.grupos.NEGOCIACAO.count}</strong><em>{formatarValor(kpis.grupos.NEGOCIACAO.valor)}</em></div></article>
+      <article className="property-kpi property-kpi--blue"><span className="property-kpi__icon fluent">&#xE7EE;</span><div><small>Reservados</small><strong>{kpis.grupos.RESERVADO.count}</strong><em>{formatarValor(kpis.grupos.RESERVADO.valor)}</em></div></article>
+      <article className="property-kpi property-kpi--green"><span className="property-kpi__icon fluent">&#xE73E;</span><div><small>Vendidos (Mês)</small><strong>{kpis.vendidosNoMes.count}</strong><em>{formatarValor(kpis.vendidosNoMes.valor)}</em></div></article>
+      <article className="property-kpi property-kpi--purple property-kpi--wide"><span className="property-kpi__icon fluent">&#xE8C7;</span><div><small>Valor Geral do Portfólio</small><strong>{formatarValor(kpis.valorTotal)}</strong><em>{imoveis.length} imóveis cadastrados</em></div></article>
+    </section>
 
     <div className="property-primary-grid">
       <div className="property-main-column">
-        <section className="portfolio-surface property-map-card"><header className="portfolio-head"><div><h2>Mapa de Imóveis</h2><small>Visualização dos imóveis por localização</small></div><nav><button className="active">Todos</button><button>○ Disponíveis</button><button>○ Em Negociação</button><button>○ Vendidos</button><button>▽ Filtros</button></nav></header><div className="property-map-stage"><MapLibreSalesMap /></div></section>
-        <section className="portfolio-surface sales-performance-card"><header className="portfolio-head"><h2>Desempenho de Vendas</h2><select aria-label="Período"><option>Este mês</option></select></header><div className="property-performance-grid"><article className="property-sales-value"><small>Valor de Vendas</small><strong>R$ 25.680.000</strong><em>↗ 28% vs mês anterior</em><div className="property-mini-chart"><i/><b>R$ 2.450.000<small>18 de Maio</small></b><span className="chart-label chart-label--a">1 Mai</span><span className="chart-label chart-label--b">15 Mai</span><span className="chart-label chart-label--c">29 Mai</span></div></article><article className="property-sales-bars"><h3>Vendas por Tipo de Imóvel</h3><ul>{salesByType.map(([name,total,value,tone])=><li className={`property-bar--${tone}`} key={name}><div><span>{name}</span><b>{total} <em>({value}%)</em></b></div><i><u style={{width:`${value}%`}}/></i></li>)}</ul></article><article className="property-broker-sales"><h3>Vendas por Corretor</h3><ul>{brokerSales.map(([name,total,value,initials],index)=><li key={name}><BrokerBadge initials={initials} index={index}/><span><b>{name}</b><i><u style={{width:`${value}%`}}/></i></span><strong>{total}</strong></li>)}</ul></article></div></section>
+        <section className="portfolio-surface property-map-card"><header className="portfolio-head"><div><h2>Mapa de Imóveis</h2><small>Dados ilustrativos — a localização real dos imóveis depende de geocodificação de endereço, ainda não implementada.</small></div></header><div className="property-map-stage"><MapLibreSalesMap /></div></section>
+        <section className="portfolio-surface sales-performance-card"><header className="portfolio-head"><h2>Desempenho de Vendas</h2><small>Este mês</small></header><div className="property-performance-grid">
+          <article className="property-sales-value">
+            <small>Valor de Vendas (fechamentos deste mês)</small>
+            <strong>{formatarValor(tendenciaVendas.atual)}</strong>
+            <em>{tendenciaVendas.percentual === null ? 'sem base do mês anterior' : `${tendenciaVendas.percentual >= 0 ? '↗' : '↘'} ${Math.abs(tendenciaVendas.percentual).toFixed(0)}% vs mês anterior`}</em>
+          </article>
+          <article className="property-sales-bars"><h3>Vendas por Finalidade</h3>
+            {vendasPorFinalidade.length === 0
+              ? <p style={{ color: 'var(--muted)', fontSize: 11 }}>Nenhuma venda fechada neste mês ainda.</p>
+              : <ul>{vendasPorFinalidade.map(({ finalidade: f, valor, percentual }) => <li key={f}><div><span>{NOMES_FINALIDADE[f]}</span><b>{formatarValor(valor)} <em>({percentual}%)</em></b></div><i><u style={{ width: `${percentual}%` }} /></i></li>)}</ul>}
+          </article>
+          <article className="property-broker-sales"><h3>Vendas por Corretor</h3>
+            {vendasPorCorretor.length === 0
+              ? <p style={{ color: 'var(--muted)', fontSize: 11 }}>Nenhuma venda fechada com corretor responsável neste mês.</p>
+              : <ul>{vendasPorCorretor.map((corretor, index) => {
+                const iniciais = corretor.nome.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+                return <li key={corretor.nome}><i className={`portfolio-broker portfolio-broker--${(index % 5) + 1}`}>{iniciais}</i><span><b>{corretor.nome}</b><i><u style={{ width: `${corretor.percentual}%` }} /></i></span><strong>{formatarValor(corretor.valor)}</strong></li>;
+              })}</ul>}
+          </article>
+        </div></section>
       </div>
 
       <aside className="property-side-column">
-        <section className="portfolio-surface featured-properties"><header className="portfolio-head"><h2>Imóveis em Destaque</h2><button>Ver todos⌄</button></header><div>{featuredProperties.map((property,index)=><article key={`${property.type}-${property.neighborhood}`} style={{position:'relative'}}>{index===0&&<span className="hot-badge">Em Alta</span>}<div className="featured-photo-wrap"><PortfolioPhoto photo={property.photo}/><button aria-label="Favoritar">{index===0||index===3?'♥':'♡'}</button></div><small>{property.type}</small><b>{property.neighborhood}</b><strong>{property.value}</strong><span>{property.details}</span><em className={`portfolio-status portfolio-status--${property.tone}`}>{property.status}</em></article>)}</div></section>
-        <section className="portfolio-surface property-types-card"><header className="portfolio-head"><h2>Imóveis por Tipo</h2><button>Ver relatório</button></header><div className="property-types-body"><div className="property-types-donut"><strong>356</strong><span>Imóveis</span></div><ul>{propertyTypes.map(([name,value,count,tone])=><li className={`property-type--${tone}`} key={name}><i/><span>{name}</span><b>{value}% <em>({count})</em></b></li>)}</ul></div></section>
-        <section className="portfolio-surface latest-properties"><header className="portfolio-head"><h2>Últimos Imóveis Cadastrados</h2><button>Ver todos⌄</button></header><ul>{portfolioRows.slice(0,4).map((property,index)=><li key={property.code}><PortfolioPhoto photo={property.photo}/><span><b>{property.type} - {property.location}</b><small>{property.area} | {property.bedrooms} dorm. | {property.parking} vagas</small></span><strong>{property.value}</strong><time>{index===0?'Hoje':index===1?'Ontem':'2 dias atrás'}</time></li>)}</ul></section>
+        <section className="portfolio-surface featured-properties"><header className="portfolio-head"><h2>Imóveis em Destaque</h2><small>Maior valor anunciado</small></header><div>
+          {imoveisEmDestaque.length === 0
+            ? <p style={{ color: 'var(--muted)', fontSize: 11, padding: '0 10px' }}>Nenhum imóvel cadastrado ainda.</p>
+            : imoveisEmDestaque.map((imovel, index) => {
+              const status = statusPorImovel.get(imovel.id) ?? 'DISPONIVEL';
+              return <article key={imovel.id} style={{ position: 'relative' }}>
+                {index === 0 && <span className="hot-badge">Em Alta</span>}
+                <div className="featured-photo-wrap"><PortfolioPhoto photo={(index % 3) + 1} /></div>
+                <small>{NOMES_FINALIDADE[imovel.finalidade]}</small>
+                <b>{imovel.enderecoResumo}</b>
+                <strong>{formatarValor(imovel.valorAnunciado)}</strong>
+                <em className={`portfolio-status portfolio-status--${STATUS_INFO[status].tone}`}>{STATUS_INFO[status].label}</em>
+              </article>;
+            })}
+        </div></section>
+        <section className="portfolio-surface property-types-card"><header className="portfolio-head"><h2>Imóveis por Finalidade</h2></header><div className="property-types-body"><ul>
+          {imoveisPorFinalidade.length === 0
+            ? <p style={{ color: 'var(--muted)', fontSize: 11 }}>Nenhum imóvel cadastrado ainda.</p>
+            : imoveisPorFinalidade.map(({ finalidade: f, count, percentual }, index) => <li className={`property-type--${['blue', 'cyan', 'orange'][index % 3]}`} key={f}><i /><span>{NOMES_FINALIDADE[f]}</span><b>{percentual}% <em>({count})</em></b></li>)}
+        </ul></div></section>
+        <section className="portfolio-surface latest-properties"><header className="portfolio-head"><h2>Últimos Imóveis Cadastrados</h2></header><ul>
+          {ultimosCadastrados.length === 0
+            ? <p style={{ color: 'var(--muted)', fontSize: 11, padding: '0 11px' }}>Nenhum imóvel cadastrado ainda.</p>
+            : ultimosCadastrados.map((imovel, index) => <li key={imovel.id}><PortfolioPhoto photo={(index % 3) + 1} /><span><b>{imovel.enderecoResumo}</b><small>{NOMES_FINALIDADE[imovel.finalidade]} · {unidadePorId.get(imovel.unidadeProprietariaId) ?? 'Unidade'}</small></span><strong>{formatarValor(imovel.valorAnunciado)}</strong><time>{formatarIdade(imovel.criadoEm)}</time></li>)}
+        </ul></section>
       </aside>
     </div>
 
-    <section className="portfolio-surface property-table-card"><header className="property-table-toolbar"><h2>Lista de Imóveis</h2><select><option>Todos os tipos</option></select><select><option>Todas as cidades</option></select><select><option>Todos os bairros</option></select><select><option>Status</option></select><label><span className="fluent">&#xE721;</span><input value={busca} onChange={(evento)=>setBusca(evento.target.value)} placeholder="Buscar imóvel..."/></label><button className="property-table-new" onClick={()=>setModalAberto(true)}>＋ Novo Imóvel</button></header><div className="property-table-scroll"><table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Localização</th><th>Área</th><th>Dorm.</th><th>Vagas</th><th>Valor</th><th>Status</th><th>Corretor</th><th>Ações</th></tr></thead><tbody>{rowsFiltradas.map((property,index)=><tr key={property.code}><td><span className="property-name-cell"><PortfolioPhoto photo={property.photo}/><span><b>{property.name}</b><small>{property.code}</small></span></span></td><td>{property.type}</td><td>{property.location}</td><td>{property.area}</td><td>{property.bedrooms}</td><td>{property.parking}</td><td><b>{property.value}</b></td><td><em className={`portfolio-status portfolio-status--${property.tone}`}>{property.status}</em></td><td><span className="property-broker-cell"><BrokerBadge initials={property.initials} index={index}/>{property.broker}</span></td><td><span className="property-row-actions"><button aria-label="Visualizar">⌾</button><button aria-label="Editar">✎</button><button aria-label="Mais ações">⋮</button></span></td></tr>)}</tbody></table></div><footer><span>Mostrando {rowsFiltradas.length} de {imoveis.length||356} imóveis</span><nav><button>‹</button><button className="active">1</button><button>2</button><button>3</button><span>…</span><button>›</button></nav></footer></section>
+    <section className="portfolio-surface property-table-card"><header className="property-table-toolbar"><h2>Lista de Imóveis</h2>
+      <select value={filtroFinalidade} onChange={(evento) => setFiltroFinalidade(evento.target.value as 'TODAS' | ImovelFinalidade)} aria-label="Filtrar por finalidade"><option value="TODAS">Todas as finalidades</option><option value="VENDA">Venda</option><option value="LOCACAO">Locação</option><option value="AMBOS">Venda e locação</option></select>
+      <select value={filtroStatus} onChange={(evento) => setFiltroStatus(evento.target.value as 'TODOS' | StatusImovel)} aria-label="Filtrar por status"><option value="TODOS">Todos os status</option><option value="DISPONIVEL">Disponível</option><option value="NEGOCIACAO">Em Negociação</option><option value="RESERVADO">Reservado</option><option value="VENDIDO">Vendido</option></select>
+      <label><span className="fluent">&#xE721;</span><input value={busca} onChange={(evento) => setBusca(evento.target.value)} placeholder="Buscar por endereço ou unidade..." /></label>
+      <button className="property-table-new" onClick={() => setModalAberto(true)}>＋ Novo Imóvel</button>
+    </header><div className="property-table-scroll"><table><thead><tr><th>Imóvel</th><th>Finalidade</th><th>Unidade</th><th>Valor</th><th>Status</th><th>Desconto</th><th>Cadastrado</th><th>Ações</th></tr></thead><tbody>{rowsFiltradas.map((imovel, index) => {
+      const status = statusPorImovel.get(imovel.id) ?? 'DISPONIVEL';
+      return <tr key={imovel.id}>
+        <td><span className="property-name-cell"><PortfolioPhoto photo={(index % 3) + 1} /><span><b>{imovel.enderecoResumo}</b></span></span></td>
+        <td>{NOMES_FINALIDADE[imovel.finalidade]}</td>
+        <td>{unidadePorId.get(imovel.unidadeProprietariaId) ?? '—'}</td>
+        <td><b>{formatarValor(imovel.valorAnunciado)}</b></td>
+        <td><em className={`portfolio-status portfolio-status--${STATUS_INFO[status].tone}`}>{STATUS_INFO[status].label}</em></td>
+        <td>{imovel.percentualDescontoPreAutorizado != null ? `${imovel.percentualDescontoPreAutorizado}%` : '—'}</td>
+        <td>{formatarIdade(imovel.criadoEm)}</td>
+        <td><span className="property-row-actions"><button aria-label="Visualizar" onClick={acaoIndisponivel}>⌾</button><button aria-label="Editar" onClick={acaoIndisponivel}>✎</button></span></td>
+      </tr>;
+    })}</tbody></table></div><footer><span>Mostrando {rowsFiltradas.length} de {imoveis.length} imóveis</span></footer></section>
 
-    {modalAberto&&<div className="property-modal-backdrop" role="presentation" onMouseDown={(evento)=>{if(evento.target===evento.currentTarget)fecharModal();}}><section className="property-modal" role="dialog" aria-modal="true" aria-labelledby="novo-imovel-title"><header><div><h2 id="novo-imovel-title">Novo Imóvel</h2><p>Cadastre o imóvel e adicione-o ao portfólio da imobiliária.</p></div><button onClick={fecharModal} aria-label="Fechar">×</button></header><form onSubmit={criarImovel}><label>Unidade proprietária<select value={unidadeProprietariaId} onChange={(evento)=>setUnidadeProprietariaId(evento.target.value)} required><option value="">Selecione</option>{unidades.map((unidade)=><option value={unidade.id} key={unidade.id}>{unidade.nomeFantasia}</option>)}</select></label><label>Finalidade<select value={finalidade} onChange={(evento)=>setFinalidade(evento.target.value as ImovelFinalidade)}><option value="VENDA">Venda</option><option value="LOCACAO">Locação</option><option value="AMBOS">Venda e locação</option></select></label><label className="property-modal-address">Endereço do imóvel<input value={enderecoResumo} onChange={(evento)=>setEnderecoResumo(evento.target.value)} minLength={5} placeholder="Rua, número, bairro e cidade" required autoFocus/></label><label>Valor anunciado<input type="number" value={valorAnunciado} onChange={(evento)=>setValorAnunciado(evento.target.value)} placeholder="R$ 0"/></label><label>Desconto pré-autorizado (%)<input type="number" value={percentualDesconto} onChange={(evento)=>setPercentualDesconto(evento.target.value)} placeholder="0%"/></label><footer><button type="button" onClick={fecharModal}>Cancelar</button><button type="submit" disabled={carregando||unidades.length===0}>{carregando?'Salvando...':'Cadastrar Imóvel'}</button></footer></form></section></div>}
+    {modalAberto && <div className="property-modal-backdrop" role="presentation" onMouseDown={(evento) => { if (evento.target === evento.currentTarget) fecharModal(); }}><section className="property-modal" role="dialog" aria-modal="true" aria-labelledby="novo-imovel-title"><header><div><h2 id="novo-imovel-title">Novo Imóvel</h2><p>Cadastre o imóvel e adicione-o ao portfólio da imobiliária.</p></div><button onClick={fecharModal} aria-label="Fechar">×</button></header><form onSubmit={criarImovel}><label>Unidade proprietária<select value={unidadeProprietariaId} onChange={(evento) => setUnidadeProprietariaId(evento.target.value)} required><option value="">Selecione</option>{unidades.map((unidade) => <option value={unidade.id} key={unidade.id}>{unidade.nomeFantasia}</option>)}</select></label><label>Finalidade<select value={finalidade} onChange={(evento) => setFinalidade(evento.target.value as ImovelFinalidade)}><option value="VENDA">Venda</option><option value="LOCACAO">Locação</option><option value="AMBOS">Venda e locação</option></select></label><label className="property-modal-address">Endereço do imóvel<input value={enderecoResumo} onChange={(evento) => setEnderecoResumo(evento.target.value)} minLength={5} placeholder="Rua, número, bairro e cidade" required autoFocus /></label><label>Valor anunciado<input type="number" value={valorAnunciado} onChange={(evento) => setValorAnunciado(evento.target.value)} placeholder="R$ 0" /></label><label>Desconto pré-autorizado (%)<input type="number" value={percentualDesconto} onChange={(evento) => setPercentualDesconto(evento.target.value)} placeholder="0%" /></label><footer><button type="button" onClick={fecharModal}>Cancelar</button><button type="submit" disabled={carregando || unidades.length === 0}>{carregando ? 'Salvando...' : 'Cadastrar Imóvel'}</button></footer></form></section></div>}
   </main>;
 }
