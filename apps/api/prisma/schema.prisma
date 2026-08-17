@@ -17,12 +17,37 @@ enum TenantStatus {
   ENCERRADO
 }
 
+// EXTENSAO REGISTRADA (onboarding self-service + cobranca): status da
+// ASSINATURA do tenant (dinheiro), deliberadamente separado de
+// TenantStatus (operacional - ex.: suspensao por abuso). Um tenant pode
+// estar ATIVO operacionalmente e ainda assim INADIMPLENTE na cobranca.
+// TRIAL = dentro do periodo de teste (ver Tenant.trialFimEm); vira ATIVA
+// quando o Checkout do Stripe confirma a primeira cobranca (webhook
+// checkout.session.completed/invoice.paid), INADIMPLENTE quando uma
+// cobranca falha (invoice.payment_failed) e CANCELADA quando a assinatura
+// e cancelada (customer.subscription.deleted). Ver BillingModule.
+enum TenantAssinaturaStatus {
+  TRIAL
+  ATIVA
+  INADIMPLENTE
+  CANCELADA
+}
+
 // ART-005, secao 3 - Tenant. Raiz de segregacao; nao e tenant-scoped, e a propria raiz.
 model Tenant {
   id          String       @id @default(uuid())
   razaoSocial String       @map("razao_social")
   status      TenantStatus @default(ATIVO)
   criadoEm    DateTime     @default(now()) @map("criado_em")
+
+  // Default ATIVA (nao TRIAL): tenants ja existentes antes desta extensao
+  // (ex.: o tenant de producao atual) nunca devem ser travados por uma
+  // migracao de schema - so tenants novos, criados via POST /tenants
+  // (TenantsService.criar), comecam explicitamente em TRIAL.
+  assinaturaStatus     TenantAssinaturaStatus @default(ATIVA) @map("assinatura_status")
+  trialFimEm           DateTime?              @map("trial_fim_em")
+  stripeCustomerId     String?                @map("stripe_customer_id")
+  stripeSubscriptionId String?                @map("stripe_subscription_id")
 
   unidades Unidade[]
   usuarios Usuario[]

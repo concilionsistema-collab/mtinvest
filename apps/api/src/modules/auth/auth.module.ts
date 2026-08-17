@@ -23,6 +23,9 @@ import { LoginLockoutService } from './login-lockout.service';
   ],
   controllers: [AuthController],
   providers: [AuthService, LoginLockoutService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
-  exports: [JwtModule],
+  // AuthService exportado: TenantsService (POST /tenants) reaproveita
+  // emitirTokens para logar o admin recem-criado direto no self-signup, sem
+  // duplicar a logica de claims/jti/refresh-token.
+  exports: [JwtModule, AuthService],
 })
 export class AuthModule {}

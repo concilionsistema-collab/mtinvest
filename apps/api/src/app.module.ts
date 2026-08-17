@@ -23,6 +23,8 @@ import { TarefasModule } from './modules/tarefas/tarefas.module';
 import { LocacaoModule } from './modules/locacao/locacao.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { HealthModule } from './modules/health/health.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -44,6 +46,12 @@ import { HealthModule } from './modules/health/health.module';
     // apenas por legibilidade; a ordem de import nao afeta o registro do
     // guard global no Nest.
     AuthModule,
+    // TenantsModule (POST /tenants publico) e BillingModule (BillingGuard
+    // global) vem logo depois de AuthModule de proposito: BillingGuard
+    // depende de request.usuarioAutenticado, que so JwtAuthGuard (registrado
+    // dentro de AuthModule) preenche - ver comentario em billing.guard.ts.
+    TenantsModule,
+    BillingModule,
     AuditoriaModule,
     UnidadesModule,
     ImoveisModule,

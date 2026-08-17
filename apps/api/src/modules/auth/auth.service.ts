@@ -144,7 +144,10 @@ export class AuthService {
     return payload;
   }
 
-  private async emitirTokens(
+  // Publico (nao mais private): TenantsService.criar tambem precisa emitir a
+  // sessao inicial do usuario admin recem-criado no self-signup (POST
+  // /tenants), sem duplicar a logica de claims/jti/refresh-token aqui.
+  async emitirTokens(
     tx: Prisma.TransactionClient,
     usuario: UsuarioRecord,
   ): Promise<{ accessToken: string; refreshToken: string }> {

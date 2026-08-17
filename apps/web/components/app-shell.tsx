@@ -3,10 +3,18 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { StatusAssinatura } from '@crm/shared';
 import { useAuth } from './auth-context';
 import { TopThemeSelector } from './top-theme-selector';
 import { FloatingAI } from './floating-ai';
 import { PresentationMode } from './presentation-mode';
+import { apiFetch } from '../lib/api';
+
+function assinaturaBloqueada(status: StatusAssinatura): boolean {
+  if (status.status === 'INADIMPLENTE' || status.status === 'CANCELADA') return true;
+  if (status.status === 'TRIAL' && status.trialFimEm) return new Date(status.trialFimEm).getTime() <= Date.now();
+  return false;
+}
 
 const nav = [
   {href:'/',icon:'\uE80F',label:'Dashboard'},
@@ -35,21 +43,46 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname=usePathname(); const router=useRouter(); const {sessao,carregando,logout}=useAuth();
   // US-113: portal do proprietario/inquilino e publico (token opaco, RN-413) -
   // quem acessa nunca tem sessao de Usuario, entao nao pode ser redirecionado pro login.
-  const login=pathname==='/login'||pathname.startsWith('/portal/');
+  // /signup: onboarding self-service (POST /tenants) - visitante ainda nao tem sessao nenhuma.
+  const login=pathname==='/login'||pathname==='/signup'||pathname.startsWith('/portal/');
   const [menuRecolhido,setMenuRecolhido]=useState(false);
   const [menuCabecalho,setMenuCabecalho]=useState<HeaderMenu>(null);
   const [notificacoesNaoLidas,setNotificacoesNaoLidas]=useState(8);
   const [presentationOpen, setPresentationOpen] = useState(false);
+  const [statusAssinatura, setStatusAssinatura] = useState<StatusAssinatura | null>(null);
+  const [abrindoCheckout, setAbrindoCheckout] = useState(false);
   const headerActionsRef=useRef<HTMLDivElement>(null);
   const tituloPagina=nav.find((item)=>item.href===pathname)?.label ?? 'CIONLARIS';
   const novoHref=pathname==='/imoveis'?'/imoveis#novo-imovel':pathname==='/oportunidades'?'/oportunidades#nova-negociacao':'/leads#novo-lead';
   const novoRotulo=pathname==='/imoveis'?'＋ Novo Imóvel':pathname==='/oportunidades'?'＋ Nova Negociação':'＋ Novo Lead';
   useEffect(()=>{if(!carregando&&!sessao&&!login)router.replace('/login');},[carregando,sessao,login,router]);
   useEffect(()=>{setMenuCabecalho(null);},[pathname]);
+  // @SkipBillingCheck no backend (billing.controller.ts) - funciona mesmo
+  // com a assinatura ja vencida, senao o bloqueio abaixo nunca conseguiria
+  // se autoconsultar.
+  useEffect(()=>{if(!sessao)return;apiFetch<StatusAssinatura>('/billing/status').then(setStatusAssinatura).catch(()=>{});},[sessao?.tenantId]);
+
+  async function iniciarCheckout(){
+    setAbrindoCheckout(true);
+    try{
+      const resultado=await apiFetch<{url:string}>('/billing/checkout',{method:'POST'});
+      window.location.href=resultado.url;
+    }catch{
+      setAbrindoCheckout(false);
+    }
+  }
   useEffect(()=>{const fecharFora=(evento:PointerEvent)=>{if(!headerActionsRef.current?.contains(evento.target as Node))setMenuCabecalho(null);};const fecharEsc=(evento:KeyboardEvent)=>{if(evento.key==='Escape')setMenuCabecalho(null);};document.addEventListener('pointerdown',fecharFora);document.addEventListener('keydown',fecharEsc);return()=>{document.removeEventListener('pointerdown',fecharFora);document.removeEventListener('keydown',fecharEsc);};},[]);
   if(login)return <div className="app-shell app-shell--login">{children}</div>;
   if(carregando)return <div className="app-loading">Carregando...</div>;
   if(!sessao)return null;
+  if(statusAssinatura&&assinaturaBloqueada(statusAssinatura))return <div className="app-loading" style={{flexDirection:'column',gap:16,textAlign:'center',padding:24}}>
+    <h1 style={{fontSize:22,margin:0}}>{statusAssinatura.status==='TRIAL'?'Seu período de teste terminou':statusAssinatura.status==='INADIMPLENTE'?'Pagamento pendente':'Assinatura cancelada'}</h1>
+    <p style={{color:'var(--muted)',maxWidth:420,margin:0}}>{statusAssinatura.status==='TRIAL'?'Assine para continuar usando o sistema — seus dados continuam salvos.':statusAssinatura.status==='INADIMPLENTE'?'A última cobrança não foi confirmada. Regularize para voltar a acessar o sistema.':'Sua assinatura foi cancelada. Assine novamente para voltar a acessar o sistema.'}</p>
+    {statusAssinatura.cobrancaIndisponivel
+      ? <p style={{color:'var(--muted)',fontSize:13}}>Cobrança ainda não está configurada neste ambiente. Entre em contato com o suporte.</p>
+      : <button type="button" onClick={iniciarCheckout} disabled={abrindoCheckout} className="new-lead" style={{border:'none'}}>{abrindoCheckout?'Abrindo...':'Assinar agora'}</button>}
+    <button type="button" onClick={()=>{logout();router.replace('/login');}} style={{background:'none',border:0,color:'var(--muted)',textDecoration:'underline',cursor:'pointer'}}>Sair</button>
+  </div>;
   return <div className={`app-frame premium-app-frame${menuRecolhido?' app-frame--collapsed':''}`}>
     <aside className="app-sidebar premium-sidebar">
       <div className="brand tenant-brand"><div className="tenant-brand__identity"><img src="/mt-invest-shield.png" alt="Escudo MT INVEST"/><img src="/mt-invest-wordmark.png" alt="MT INVEST"/></div><button type="button" onClick={()=>setMenuRecolhido((atual)=>!atual)} aria-label={menuRecolhido?'Expandir menu':'Recolher menu'} aria-expanded={!menuRecolhido}>☰</button></div>
@@ -59,6 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="system-creator-brand"><small>CRM desenvolvido por</small><img src="/cionlaris-logo-transparent.png" alt="CIONLARIS CRM Imobiliário by Concilion"/></div>
     </aside>
     <div className="app-main"><header className="app-header"><div className="header-page-title"><b>{tituloPagina}</b><small>{pathname==='/'?'Visão geral do negócio':pathname==='/leads'?'Gerencie seus leads e transforme oportunidades em vendas':pathname==='/imoveis'?'Gerencie seu portfólio de imóveis e acompanhe o desempenho de vendas':pathname==='/oportunidades'?'Acompanhe o andamento de todas as negociações':'Gestão imobiliária'}</small></div><div className="search"><span className="fluent">&#xE721;</span><input aria-label="Buscar" placeholder={pathname==='/imoveis'?'Buscar imóveis, leads, proprietários, bairros...':pathname==='/oportunidades'?'Buscar negociações, leads, imóveis ou clientes...':'Buscar leads, clientes, imóveis, oportunidades...'}/><span className="fluent">&#xE11A;</span></div>
+      {statusAssinatura?.status==='TRIAL'&&statusAssinatura.diasRestantesTrial!==null&&<Link href="/configuracoes" style={{padding:'6px 12px',borderRadius:20,fontSize:11,color:'var(--muted)',border:'1px solid var(--line)',whiteSpace:'nowrap'}}>Teste grátis: {statusAssinatura.diasRestantesTrial===0?'último dia':`${statusAssinatura.diasRestantesTrial} dia(s)`}</Link>}
       <button type="button" onClick={() => setPresentationOpen(true)} className="new-lead" style={{background: 'linear-gradient(135deg, var(--purple), #5d35be)', border: 'none'}}><span className="fluent">&#xE71C;</span> Apresentação Executiva</button>
       <Link href={novoHref} className="new-lead">{novoRotulo}</Link>
       <TopThemeSelector />

@@ -86,9 +86,15 @@ function validarVariaveisDeAmbiente(): void {
  */
 export async function createApp(expressInstance?: Express): Promise<INestApplication> {
   validarVariaveisDeAmbiente();
+  // rawBody:true expõe request.rawBody (Buffer) em toda requisição, ALÉM do
+  // corpo já parseado como JSON normalmente (@Body()) - não muda o parsing
+  // de nenhuma outra rota. Só existe porque BillingController.webhook
+  // precisa do byte a byte exato recebido para verificar a assinatura HMAC
+  // do Stripe (Stripe.webhooks.constructEvent) - reserializar o JSON já
+  // parseado produziria bytes diferentes e a verificação falharia sempre.
   const app = expressInstance
-    ? await NestFactory.create(AppModule, new ExpressAdapter(expressInstance))
-    : await NestFactory.create(AppModule);
+    ? await NestFactory.create(AppModule, new ExpressAdapter(expressInstance), { rawBody: true })
+    : await NestFactory.create(AppModule, { rawBody: true });
 
   // EXTENSAO REGISTRADA: sem isto, os hooks OnModuleDestroy (inclusive
   // PrismaService.onModuleDestroy -> $disconnect()) nunca disparam em SIGTERM/

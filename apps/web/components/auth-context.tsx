@@ -32,6 +32,8 @@ interface AuthContextValue {
   sessao: SessaoAtiva | null;
   carregando: boolean;
   login: (input: LoginInput) => Promise<void>;
+  /** POST /tenants (self-signup) já devolve accessToken/refreshToken/usuario prontos - evita logar de novo via /auth/login logo em seguida. */
+  entrarComSessao: (resultado: LoginResultado) => void;
   logout: () => void;
 }
 
@@ -96,6 +98,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     restaurarSessao().finally(() => setCarregando(false));
   }, []);
 
+  function entrarComSessao(resultado: LoginResultado): void {
+    salvarToken(resultado.accessToken);
+    salvarRefreshToken(resultado.refreshToken);
+    setSessao({
+      tenantId: resultado.usuario.tenantId,
+      usuarioId: resultado.usuario.id,
+      unidadeId: resultado.usuario.unidadeId,
+      perfil: resultado.usuario.perfil,
+    });
+  }
+
   async function login(input: LoginInput): Promise<void> {
     const resposta = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
@@ -106,14 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new ApiError(resposta.status, 'E-mail, senha ou empresa inválidos.');
     }
     const resultado = (await resposta.json()) as LoginResultado;
-    salvarToken(resultado.accessToken);
-    salvarRefreshToken(resultado.refreshToken);
-    setSessao({
-      tenantId: resultado.usuario.tenantId,
-      usuarioId: resultado.usuario.id,
-      unidadeId: resultado.usuario.unidadeId,
-      perfil: resultado.usuario.perfil,
-    });
+    entrarComSessao(resultado);
   }
 
   function logout(): void {
@@ -133,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  return <AuthContext.Provider value={{ sessao, carregando, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ sessao, carregando, login, entrarComSessao, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
