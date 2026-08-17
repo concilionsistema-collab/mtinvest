@@ -1,15 +1,38 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import type { Imovel, Lead, Oportunidade, Visita } from '@crm/shared';
+import { useEffect, useMemo, useState } from 'react';
+import type { IndicadoresFunil, Imovel, Lead, Oportunidade, Tarefa, Usuario, Visita } from '@crm/shared';
 import { useAuth } from '../components/auth-context';
-import { apiFetch } from '../lib/api';
+import { apiFetch, ApiError } from '../lib/api';
 import { MapLibreSalesMap } from '../components/maplibre-sales-map';
-import { CompactSalesFunnel, PremiumSalesPerformance } from '../components/dashboard-sales-widgets';
+import { CompactSalesFunnel, PremiumSalesPerformance, type PontoVendasDia } from '../components/dashboard-sales-widgets';
 
 const ESTADOS_OPORTUNIDADE_ENCERRADOS = ['FECHADA', 'PERDIDA'];
 const ESTADOS_VISITA_AGENDADA = ['AGENDADA', 'CONFIRMADA'];
+
+const NOMES_CANAL: Record<string, string> = {
+  whatsapp: 'WhatsApp',
+  portal: 'Portal',
+  site: 'Site',
+  indicacao: 'Indicação',
+  captacao_ativa: 'Captação ativa',
+};
+
+const LABEL_ESTADO_OPORTUNIDADE: Record<string, string> = {
+  QUALIFICACAO: 'Qualificação',
+  VISITA_AGENDADA: 'Visita Agendada',
+  VISITA_CONFIRMADA: 'Visita Confirmada',
+  VISITA_REALIZADA: 'Visita Realizada',
+  PROPOSTA_ENVIADA: 'Proposta Enviada',
+  EM_CONTRAPROPOSTA: 'Em Contraproposta',
+  RESERVA: 'Reserva',
+  DOCUMENTACAO_CONCLUIDA: 'Documentação',
+  FECHADA: 'Fechada',
+  PERDIDA: 'Perdida',
+};
+
+const AVISO_SOMENTE_GESTOR = 'Apenas o perfil "Gestor de unidade" acessa este indicador.';
 
 /** R$ 4,85 mi acima de 1 milhão, valor cheio abaixo disso - nunca inventa precisão que a abreviação "mi" não teria. */
 function formatarMoeda(valor: number): string {
@@ -43,6 +66,28 @@ function calcularCrescimentoMensal(totalAgora: number, criadosEsteMes: number): 
     return criadosEsteMes > 0 ? 100 : null;
   }
   return (criadosEsteMes / totalInicioDoMes) * 100;
+}
+
+/** Mesma simplificação de calcularCrescimentoMensal: usa Oportunidade.criadoEm como proxy da data de fechamento (não existe campo separado "fechadoEm" nesta fatia). */
+function construirSerieVendasDoMes(oportunidades: Oportunidade[], imoveis: Imovel[]): PontoVendasDia[] {
+  const hoje = new Date();
+  const diaAtual = hoje.getDate();
+  const valorPorDia = new Map<number, number>();
+  for (const o of oportunidades) {
+    if (o.estado !== 'FECHADA') continue;
+    const dataFechamento = new Date(o.criadoEm);
+    if (dataFechamento < INICIO_DO_MES) continue;
+    const dia = dataFechamento.getDate();
+    const imovel = imoveis.find((i) => i.id === o.imovelId);
+    valorPorDia.set(dia, (valorPorDia.get(dia) ?? 0) + (imovel?.valorAnunciado ?? 0));
+  }
+  let acumulado = 0;
+  const serie: PontoVendasDia[] = [];
+  for (let dia = 1; dia <= diaAtual; dia += 1) {
+    acumulado += valorPorDia.get(dia) ?? 0;
+    serie.push({ dia, valor: acumulado });
+  }
+  return serie;
 }
 
 interface MetricaDashboard {
@@ -109,36 +154,16 @@ function MetricCard({ metric }: { metric: MetricaDashboard }) {
   );
 }
 
-const activities = [
-  ['', 'green', 'Ligar para Maria Silva', 'Contato inicial', '09:00'],
-  ['', 'orange', 'Enviar proposta Apto. Jardins', 'Proposta aguardando', '10:30'],
-  ['', 'blue', 'Visita agendada - Cliente Pedro', 'Apartamento 1201', '14:00'],
-  ['', 'emerald', 'Follow-up João Souza', 'Negociação em andamento', '15:30'],
-  ['', 'purple', 'Assinar contrato - Apto. 502', 'Documentação', '16:00'],
-];
-
-const leadSources = [
-  ['Site / Portal', 38, '474'],
-  ['Indicação', 28, '349'],
-  ['Redes Sociais', 18, '225'],
-  ['Campanhas', 10, '125'],
-  ['Outros', 6, '75'],
-];
-
-const properties = [
-  ['Apartamento', 'Jardins', 'R$ 2.450.000', '120m² | 3 dorm.'],
-  ['Cobertura', 'Itaim Bibi', 'R$ 5.800.000', '280m² | 4 dorm.'],
-  ['Studio', 'Vila Madalena', 'R$ 450.000', '45m² | 1 dorm.'],
-];
-const propertyTargets = ['AP-101', 'COB-201', 'ST-401'];
-
 function Panel({ title, action, actionHref, className = '', children }: { title: string; action?: string; actionHref?: string; className?: string; children: React.ReactNode }) {
   return <section className={`dash-panel ${className}`}><div className="panel-head"><h2>{title}</h2>{action && (actionHref ? <Link href={actionHref}>{action}</Link> : <button type="button">{action}</button>)}</div>{children}</section>;
 }
 
 export default function DashboardPage() {
   const { sessao } = useAuth();
-  const [metrics, setMetrics] = useState<MetricaDashboard[] | null>(null);
+  const [dadosBase, setDadosBase] = useState<{ leads: Lead[]; oportunidades: Oportunidade[]; imoveis: Imovel[]; visitas: Visita[]; usuarios: Usuario[] } | null>(null);
+  const [indicadores, setIndicadores] = useState<IndicadoresFunil | null>(null);
+  const [semPermissaoIndicadores, setSemPermissaoIndicadores] = useState(false);
+  const [tarefas, setTarefas] = useState<Tarefa[] | null>(null);
 
   useEffect(() => {
     if (!sessao) return;
@@ -147,33 +172,126 @@ export default function DashboardPage() {
       apiFetch<Oportunidade[]>('/oportunidades'),
       apiFetch<Imovel[]>('/imoveis'),
       apiFetch<Visita[]>('/visitas'),
-    ]).then(([leads, oportunidades, imoveis, visitas]) => {
-      const oportunidadesAtivas = oportunidades.filter((o) => !ESTADOS_OPORTUNIDADE_ENCERRADOS.includes(o.estado));
-      const oportunidadesFechadas = oportunidades.filter((o) => o.estado === 'FECHADA');
-      const visitasAgendadas = visitas.filter((v) => ESTADOS_VISITA_AGENDADA.includes(v.estado));
-      // Mesma lógica de IndicadoresService: soma Imovel.valorAnunciado das oportunidades FECHADA,
-      // nunca infere valor de imóvel sem valorAnunciado cadastrado (fica 0, não estimado).
-      const vgvFechado = oportunidadesFechadas.reduce((total, o) => {
-        const imovel = imoveis.find((i) => i.id === o.imovelId);
-        return total + (imovel?.valorAnunciado ?? 0);
-      }, 0);
-      // VGV não tem "criadoEm" próprio - usa a data das oportunidades FECHADA que compõem a soma.
-      const vgvCriadoEsteMes = oportunidadesFechadas
-        .filter((o) => new Date(o.criadoEm) >= INICIO_DO_MES)
-        .reduce((total, o) => total + (imoveis.find((i) => i.id === o.imovelId)?.valorAnunciado ?? 0), 0);
+      apiFetch<Usuario[]>('/usuarios'),
+    ]).then(([leads, oportunidades, imoveis, visitas, usuarios]) => {
+      setDadosBase({ leads, oportunidades, imoveis, visitas, usuarios });
+    }).catch(() => setDadosBase({ leads: [], oportunidades: [], imoveis: [], visitas: [], usuarios: [] }));
 
-      const identidade = (n: number) => n.toLocaleString('pt-BR');
+    apiFetch<IndicadoresFunil>('/indicadores')
+      .then(setIndicadores)
+      .catch((e) => { if (e instanceof ApiError && e.status === 403) setSemPermissaoIndicadores(true); });
 
-      setMetrics([
-        { label: 'Leads Totais', rawValue: leads.length, format: identidade, trendPercent: calcularCrescimentoMensal(leads.length, criadosNoMes(leads)), color: 'sky', icon: '/metric-leads-3d-transparent.png', href: '/leads' },
-        { label: 'Negociações Ativas', rawValue: oportunidadesAtivas.length, format: identidade, trendPercent: calcularCrescimentoMensal(oportunidadesAtivas.length, criadosNoMes(oportunidadesAtivas)), color: 'cyan', icon: '/metric-negotiations-3d-transparent.png', href: '/oportunidades' },
-        { label: 'Imóveis em Carteira', rawValue: imoveis.length, format: identidade, trendPercent: calcularCrescimentoMensal(imoveis.length, criadosNoMes(imoveis)), color: 'blue', icon: '/metric-properties-3d-transparent.png', href: '/imoveis' },
-        { label: 'Visitas Agendadas', rawValue: visitasAgendadas.length, format: identidade, trendPercent: calcularCrescimentoMensal(visitasAgendadas.length, criadosNoMes(visitasAgendadas)), color: 'orange', icon: '/metric-visits-3d-transparent.png', href: '/visitas' },
-        { label: 'Vendas Fechadas', rawValue: oportunidadesFechadas.length, format: identidade, trendPercent: calcularCrescimentoMensal(oportunidadesFechadas.length, criadosNoMes(oportunidadesFechadas)), color: 'green', icon: '/metric-sales-3d-transparent.png', href: '/oportunidades' },
-        { label: 'VGV Fechado', rawValue: vgvFechado, format: formatarMoeda, trendPercent: calcularCrescimentoMensal(vgvFechado, vgvCriadoEsteMes), color: 'purple', icon: '/metric-revenue-3d-transparent.png', href: '/financeiro' },
-      ]);
-    }).catch(() => setMetrics([]));
+    apiFetch<Tarefa[]>('/tarefas').then(setTarefas).catch(() => setTarefas([]));
   }, [sessao?.tenantId]);
+
+  const metrics = useMemo<MetricaDashboard[] | null>(() => {
+    if (!dadosBase) return null;
+    const { leads, oportunidades, imoveis, visitas } = dadosBase;
+    const oportunidadesAtivas = oportunidades.filter((o) => !ESTADOS_OPORTUNIDADE_ENCERRADOS.includes(o.estado));
+    const oportunidadesFechadas = oportunidades.filter((o) => o.estado === 'FECHADA');
+    const visitasAgendadas = visitas.filter((v) => ESTADOS_VISITA_AGENDADA.includes(v.estado));
+    // Mesma lógica de IndicadoresService: soma Imovel.valorAnunciado das oportunidades FECHADA,
+    // nunca infere valor de imóvel sem valorAnunciado cadastrado (fica 0, não estimado).
+    const vgvFechado = oportunidadesFechadas.reduce((total, o) => {
+      const imovel = imoveis.find((i) => i.id === o.imovelId);
+      return total + (imovel?.valorAnunciado ?? 0);
+    }, 0);
+    const vgvCriadoEsteMes = oportunidadesFechadas
+      .filter((o) => new Date(o.criadoEm) >= INICIO_DO_MES)
+      .reduce((total, o) => total + (imoveis.find((i) => i.id === o.imovelId)?.valorAnunciado ?? 0), 0);
+
+    const identidade = (n: number) => n.toLocaleString('pt-BR');
+
+    return [
+      { label: 'Leads Totais', rawValue: leads.length, format: identidade, trendPercent: calcularCrescimentoMensal(leads.length, criadosNoMes(leads)), color: 'sky', icon: '/metric-leads-3d-transparent.png', href: '/leads' },
+      { label: 'Negociações Ativas', rawValue: oportunidadesAtivas.length, format: identidade, trendPercent: calcularCrescimentoMensal(oportunidadesAtivas.length, criadosNoMes(oportunidadesAtivas)), color: 'cyan', icon: '/metric-negotiations-3d-transparent.png', href: '/oportunidades' },
+      { label: 'Imóveis em Carteira', rawValue: imoveis.length, format: identidade, trendPercent: calcularCrescimentoMensal(imoveis.length, criadosNoMes(imoveis)), color: 'blue', icon: '/metric-properties-3d-transparent.png', href: '/imoveis' },
+      { label: 'Visitas Agendadas', rawValue: visitasAgendadas.length, format: identidade, trendPercent: calcularCrescimentoMensal(visitasAgendadas.length, criadosNoMes(visitasAgendadas)), color: 'orange', icon: '/metric-visits-3d-transparent.png', href: '/visitas' },
+      { label: 'Vendas Fechadas', rawValue: oportunidadesFechadas.length, format: identidade, trendPercent: calcularCrescimentoMensal(oportunidadesFechadas.length, criadosNoMes(oportunidadesFechadas)), color: 'green', icon: '/metric-sales-3d-transparent.png', href: '/oportunidades' },
+      { label: 'VGV Fechado', rawValue: vgvFechado, format: formatarMoeda, trendPercent: calcularCrescimentoMensal(vgvFechado, vgvCriadoEsteMes), color: 'purple', icon: '/metric-revenue-3d-transparent.png', href: '/financeiro' },
+    ];
+  }, [dadosBase]);
+
+  const serieVendas = useMemo(() => {
+    if (!dadosBase) return [];
+    return construirSerieVendasDoMes(dadosBase.oportunidades, dadosBase.imoveis);
+  }, [dadosBase]);
+
+  const canaisOrdenados = useMemo(() => {
+    if (!indicadores) return [];
+    const total = Object.values(indicadores.leadsPorCanal).reduce((soma, v) => soma + v, 0) || 1;
+    return Object.entries(indicadores.leadsPorCanal)
+      .sort(([, a], [, b]) => b - a)
+      .map(([canal, quantidade]) => ({ canal, nome: NOMES_CANAL[canal] ?? canal, quantidade, percentual: Math.round((quantidade / total) * 100) }));
+  }, [indicadores]);
+
+  const totalLeadsPorCanal = useMemo(() => canaisOrdenados.reduce((soma, c) => soma + c.quantidade, 0), [canaisOrdenados]);
+
+  const tarefasAbertas = useMemo(() => {
+    if (!tarefas) return null;
+    return tarefas
+      .filter((t) => !t.concluida)
+      .sort((a, b) => {
+        if (!a.prazo && !b.prazo) return 0;
+        if (!a.prazo) return 1;
+        if (!b.prazo) return -1;
+        return new Date(a.prazo).getTime() - new Date(b.prazo).getTime();
+      })
+      .slice(0, 5);
+  }, [tarefas]);
+
+  const imoveisEmDestaque = useMemo(() => {
+    if (!dadosBase) return [];
+    return [...dadosBase.imoveis]
+      .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime())
+      .slice(0, 3);
+  }, [dadosBase]);
+
+  const negociacoesRecentes = useMemo(() => {
+    if (!dadosBase) return [];
+    return [...dadosBase.oportunidades]
+      .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime())
+      .slice(0, 5)
+      .map((o) => ({ oportunidade: o, imovel: dadosBase.imoveis.find((i) => i.id === o.imovelId) }));
+  }, [dadosBase]);
+
+  const proximasVisitas = useMemo(() => {
+    if (!dadosBase) return [];
+    const agora = Date.now();
+    return dadosBase.visitas
+      .filter((v) => ESTADOS_VISITA_AGENDADA.includes(v.estado) && new Date(v.dataHora).getTime() >= agora)
+      .sort((a, b) => new Date(a.dataHora).getTime() - new Date(b.dataHora).getTime())
+      .slice(0, 3)
+      .map((v) => {
+        const oportunidade = dadosBase.oportunidades.find((o) => o.id === v.oportunidadeId);
+        const imovel = oportunidade ? dadosBase.imoveis.find((i) => i.id === oportunidade.imovelId) : undefined;
+        return { visita: v, imovel };
+      });
+  }, [dadosBase]);
+
+  const conversaoLeads = useMemo(() => {
+    if (!dadosBase || dadosBase.leads.length === 0) return null;
+    const convertidos = dadosBase.leads.filter((l) => l.estado === 'CONVERTIDO').length;
+    return { convertidos, total: dadosBase.leads.length, percentual: Math.round((convertidos / dadosBase.leads.length) * 1000) / 10 };
+  }, [dadosBase]);
+
+  /** Oportunidade não tem campo de corretor responsável - usa o responsavelUsuarioId do Lead de origem como proxy real (uma negociação só existe se o lead já tiver responsável). */
+  const rankingCorretores = useMemo(() => {
+    if (!dadosBase) return [];
+    const { oportunidades, leads, imoveis, usuarios } = dadosBase;
+    const porCorretor = new Map<string, { nome: string; count: number; valor: number }>();
+    for (const o of oportunidades) {
+      if (o.estado === 'PERDIDA') continue;
+      const lead = leads.find((l) => l.id === o.leadId);
+      const corretor = lead?.responsavelUsuarioId ? usuarios.find((u) => u.id === lead.responsavelUsuarioId) : undefined;
+      if (!corretor) continue;
+      const imovel = imoveis.find((i) => i.id === o.imovelId);
+      const atual = porCorretor.get(corretor.id) ?? { nome: corretor.nome, count: 0, valor: 0 };
+      atual.count += 1; atual.valor += imovel?.valorAnunciado ?? 0;
+      porCorretor.set(corretor.id, atual);
+    }
+    return [...porCorretor.values()].sort((a, b) => b.valor - a.valor).slice(0, 5);
+  }, [dadosBase]);
 
   return (
     <main className="dashboard">
@@ -184,42 +302,62 @@ export default function DashboardPage() {
 
       <div className="dashboard-row dashboard-row--top">
         <Panel title="Funil de Vendas" className="funnel-panel">
-          <CompactSalesFunnel />
+          {semPermissaoIndicadores
+            ? <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>{AVISO_SOMENTE_GESTOR}</p>
+            : <CompactSalesFunnel dados={indicadores ?? undefined} />}
         </Panel>
 
-        <Panel title="Performance de Vendas" action="Este mês⌄" className="performance-panel">
-          <PremiumSalesPerformance />
+        <Panel title="Performance de Vendas" className="performance-panel">
+          <PremiumSalesPerformance serie={serieVendas} />
         </Panel>
 
         <Panel title="Origem dos Leads" className="source-panel">
-          <div className="source-wrap">
-            <div className="source-donut" role="img" aria-label="1.248 leads distribuídos por cinco canais">
-              <div className="source-donut__center"><strong>1.248</strong><span>Leads</span><small>este mês</small></div>
+          {semPermissaoIndicadores ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>{AVISO_SOMENTE_GESTOR}</p>
+          ) : !indicadores ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Carregando...</p>
+          ) : canaisOrdenados.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Nenhum lead capturado ainda.</p>
+          ) : (
+            <div className="source-wrap">
+              <div className="source-donut" role="img" aria-label={`${totalLeadsPorCanal} leads distribuídos por canal`}>
+                <div className="source-donut__center"><strong>{totalLeadsPorCanal.toLocaleString('pt-BR')}</strong><span>Leads</span><small>total</small></div>
+              </div>
+              <ul className="source-list">
+                {canaisOrdenados.map((c, index) => (
+                  <li className={`source-list__item source-list__item--${index + 1}`} key={c.canal}>
+                    <i />
+                    <span><b>{c.nome}</b><small>{c.quantidade} leads</small></span>
+                    <strong>{c.percentual}%</strong>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="source-list">
-              {leadSources.map(([label, percentage, count], index) => (
-                <li className={`source-list__item source-list__item--${index + 1}`} key={String(label)}>
-                  <i />
-                  <span><b>{label}</b><small>{count} leads</small></span>
-                  <strong>{percentage}%</strong>
-                </li>
-              ))}
-            </ul>
-          </div>
+          )}
         </Panel>
 
         <Panel title="Atividades de Hoje" action="Ver todas" actionHref="/tarefas" className="activity-panel">
-          <ul className="activity-list">
-            {activities.map(([icon,tone,title,sub,time]) => (
-              <li key={title}>
-                <Link href="/tarefas" style={{ display: 'contents', color: 'inherit', textDecoration: 'none' }}>
-                  <span className={`activity-icon activity-icon--${tone} fluent`} aria-hidden="true">{icon}</span>
-                  <div><b>{title}</b><small>{sub}</small></div>
-                  <time>{time}</time>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {tarefasAbertas === null ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Carregando...</p>
+          ) : tarefasAbertas.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Nenhuma tarefa em aberto.</p>
+          ) : (
+            <ul className="activity-list">
+              {tarefasAbertas.map((tarefa, index) => {
+                const tons = ['green', 'orange', 'blue', 'emerald', 'purple'];
+                const atrasada = tarefa.prazo && new Date(tarefa.prazo).getTime() < Date.now();
+                return (
+                  <li key={tarefa.id}>
+                    <Link href="/tarefas" style={{ display: 'contents', color: 'inherit', textDecoration: 'none' }}>
+                      <span className={`activity-icon activity-icon--${tons[index % tons.length]} fluent`} aria-hidden="true" />
+                      <div><b>{tarefa.titulo}</b><small>{atrasada ? 'Atrasada' : 'Pendente'}</small></div>
+                      <time>{tarefa.prazo ? new Date(tarefa.prazo).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'Sem prazo'}</time>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Panel>
       </div>
 
@@ -229,40 +367,109 @@ export default function DashboardPage() {
         </Panel>
 
         <div className="side-stack">
-          <Panel title="Imóveis em Destaque" action="Ver todas" actionHref="/imoveis#lista-imoveis"><div className="property-grid">{properties.map((p,i)=><Link href={`/imoveis#imovel-${propertyTargets[i]}`} className="featured-property-link" aria-label={`Ver ${p[0]} em ${p[1]}`} key={p[1]}><article style={{position:'relative'}}>{i === 0 && <span className="hot-badge">Em Alta</span>}<div className={`property-photo photo-${i+1}`}/><small>{p[0]}</small><b>{p[1]}</b><strong>{p[2]}</strong><span>{p[3]}</span></article></Link>)}</div></Panel>
-          <Panel title="Negociações Recentes" action="Ver todas" actionHref="/oportunidades">
-            <ul className="deal-list">
-              {properties.concat([['Apartamento','Apto. Moema','R$ 1.250.000','Proposta'],['Casa','Casa Alphaville','R$ 3.200.000','Negociação']]).map((p,i)=>(
-                <li key={p[1]}>
-                  <Link href="/oportunidades" style={{ display: 'contents', color: 'inherit', textDecoration: 'none' }}>
-                    <span className={`mini-photo photo-${i%3+1}`}/>
-                    <b>{p[1]}</b>
-                    <small>{p[2]}</small>
-                    <em>{i%2?'Negociação':'Proposta'}</em>
+          <Panel title="Imóveis em Destaque" action="Ver todas" actionHref="/imoveis">
+            {imoveisEmDestaque.length === 0 ? (
+              <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Nenhum imóvel cadastrado ainda.</p>
+            ) : (
+              <div className="property-grid">
+                {imoveisEmDestaque.map((imovel, i) => (
+                  <Link href="/imoveis" className="featured-property-link" aria-label={`Ver imóvel em ${imovel.enderecoResumo}`} key={imovel.id}>
+                    <article>
+                      <div className={`property-photo photo-${i + 1}`} />
+                      <small>{imovel.finalidade === 'VENDA' ? 'Venda' : imovel.finalidade === 'LOCACAO' ? 'Locação' : 'Venda/Locação'}</small>
+                      <b>{imovel.enderecoResumo}</b>
+                      <strong>{imovel.valorAnunciado != null ? formatarMoeda(imovel.valorAnunciado) : 'Valor a definir'}</strong>
+                    </article>
                   </Link>
-                </li>
-              ))}
-            </ul>
+                ))}
+              </div>
+            )}
+          </Panel>
+          <Panel title="Negociações Recentes" action="Ver todas" actionHref="/oportunidades">
+            {negociacoesRecentes.length === 0 ? (
+              <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Nenhuma negociação registrada ainda.</p>
+            ) : (
+              <ul className="deal-list">
+                {negociacoesRecentes.map((item, i) => (
+                  <li key={item.oportunidade.id}>
+                    <Link href="/oportunidades" style={{ display: 'contents', color: 'inherit', textDecoration: 'none' }}>
+                      <span className={`mini-photo photo-${i % 3 + 1}`} />
+                      <b>{item.imovel?.enderecoResumo ?? 'Imóvel'}</b>
+                      <small>{item.imovel?.valorAnunciado != null ? formatarMoeda(item.imovel.valorAnunciado) : 'Valor a definir'}</small>
+                      <em>{LABEL_ESTADO_OPORTUNIDADE[item.oportunidade.estado] ?? item.oportunidade.estado}</em>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Panel>
         </div>
       </div>
 
       <div className="dashboard-row dashboard-row--bottom">
-        <Panel title="Resumo Financeiro" action="Este mês⌄" className="bottom-card finance-panel">
-          <ul className="finance-list"><li><span>VGV Previsto</span><b>R$ 6.200.000</b></li><li><span>VGV Realizado</span><b>R$ 4.850.000</b></li><li><span>Comissões</span><b>R$ 242.500</b></li><li><span>A receber</span><b>R$ 1.125.000</b></li></ul>
-          <div className="finance-progress"><div><i /></div><small>78% do VGV previsto</small></div><a>Ver relatório financeiro</a>
+        <Panel title="Resumo Financeiro" actionHref="/financeiro" action="Ver relatório" className="bottom-card finance-panel">
+          {semPermissaoIndicadores ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>{AVISO_SOMENTE_GESTOR}</p>
+          ) : !indicadores ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Carregando...</p>
+          ) : (
+            <ul className="finance-list">
+              <li><span>VGV realizado</span><b>{formatarMoeda(indicadores.vgvFechado)}</b></li>
+              <li><span>Negócios fechados</span><b>{indicadores.fechamentos}</b></li>
+              <li><span>Comissões cruzadas acionadas</span><b>{indicadores.comissoesCruzadasQuantidade}</b></li>
+            </ul>
+          )}
         </Panel>
-        <Panel title="Conversão de Leads" action="Este mês⌄" className="bottom-card conversion-panel">
-          <div className="conversion-premium"><div className="conversion-ring"><strong>23%</strong><small>conversão</small></div><div className="conversion-copy"><b>Taxa de conversão</b><span><strong>298</strong> fechados de<br/><strong>1.248</strong> leads</span><a>Ver detalhes</a></div></div>
+        <Panel title="Conversão de Leads" className="bottom-card conversion-panel">
+          {!conversaoLeads ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Sem leads cadastrados ainda.</p>
+          ) : (
+            <div className="conversion-premium">
+              <div className="conversion-ring"><strong>{conversaoLeads.percentual}%</strong><small>conversão</small></div>
+              <div className="conversion-copy"><b>Taxa de conversão</b><span><strong>{conversaoLeads.convertidos}</strong> convertidos de<br /><strong>{conversaoLeads.total}</strong> leads</span><Link href="/leads">Ver detalhes</Link></div>
+            </div>
+          )}
         </Panel>
-        <Panel title="Leads por Canal" action="Este mês⌄" className="bottom-card channels-panel">
-          <ul className="channel-list">{leadSources.map(([name, value, count], index)=><li className={`channel-list__item channel-list__item--${index + 1}`} key={String(name)}><div><span>{name}</span><b>{value}% <em>({count})</em></b></div><i><u style={{width:`${Number(value) * 2.25}%`}} /></i></li>)}</ul>
+        <Panel title="Leads por Canal" className="bottom-card channels-panel">
+          {semPermissaoIndicadores ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>{AVISO_SOMENTE_GESTOR}</p>
+          ) : canaisOrdenados.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>{indicadores ? 'Nenhum lead capturado ainda.' : 'Carregando...'}</p>
+          ) : (
+            <ul className="channel-list">
+              {canaisOrdenados.map((c, index) => (
+                <li className={`channel-list__item channel-list__item--${index + 1}`} key={c.canal}>
+                  <div><span>{c.nome}</span><b>{c.percentual}% <em>({c.quantidade})</em></b></div>
+                  <i><u style={{ width: `${c.percentual * 2.25}%` }} /></i>
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
-        <Panel title="Top Corretores" action="Este mês⌄" className="bottom-card brokers-panel">
-          <ol className="broker-ranking">{[['JC','João Corretor','R$ 285.000'],['AP','Ana Paula','R$ 195.000'],['CM','Carlos Mendes','R$ 142.000'],['JA','Juliana Alves','R$ 98.500'],['PA','Pedro Augusto','R$ 76.000']].map(([initials,name,total],index)=><li key={name}><span className="broker-position">{index + 1}</span><i className={`broker-avatar broker-avatar--${index + 1}`}>{initials}</i><b>{name}</b><strong>{total}</strong></li>)}</ol>
+        <Panel title="Top Corretores" className="bottom-card brokers-panel">
+          {rankingCorretores.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Nenhuma negociação com corretor responsável ainda.</p>
+          ) : (
+            <ol className="broker-ranking">{rankingCorretores.map((corretor, index) => {
+              const iniciais = corretor.nome.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+              return <li key={corretor.nome}><span className="broker-position">{index + 1}</span><i className={`broker-avatar broker-avatar--${index + 1}`}>{iniciais}</i><b>{corretor.nome}</b><strong>{formatarMoeda(corretor.valor)}</strong></li>;
+            })}</ol>
+          )}
         </Panel>
-        <Panel title="Próximas Visitas" action="Ver agenda" className="bottom-card visits-panel">
-          <ul className="visit-schedule"><li><i className="visit-thumb photo-1"/><time>09:30</time><span><b>Apartamento 1201 - Jardins</b><small>Cliente: Maria Silva</small></span></li><li><i className="visit-thumb photo-2"/><time>11:00</time><span><b>Cobertura Itaim</b><small>Cliente: Carlos Eduardo</small></span></li><li><i className="visit-thumb photo-3"/><time>14:30</time><span><b>Casa Alphaville</b><small>Cliente: Fernanda Lima</small></span></li></ul>
+        <Panel title="Próximas Visitas" action="Ver agenda" actionHref="/visitas" className="bottom-card visits-panel">
+          {proximasVisitas.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Nenhuma visita agendada.</p>
+          ) : (
+            <ul className="visit-schedule">
+              {proximasVisitas.map((item, i) => (
+                <li key={item.visita.id}>
+                  <i className={`visit-thumb photo-${i + 1}`} />
+                  <time>{new Date(item.visita.dataHora).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} {new Date(item.visita.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</time>
+                  <span><b>{item.imovel?.enderecoResumo ?? 'Imóvel'}</b><small>{item.visita.estado === 'CONFIRMADA' ? 'Confirmada' : 'Agendada'}</small></span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
       </div>
     </main>

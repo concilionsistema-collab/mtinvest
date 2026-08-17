@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import type { IndicadoresFunil } from '@crm/shared';
 import { useTheme } from './theme-context';
 
 import '../app/funnel-v2.css';
@@ -13,9 +14,6 @@ const ETAPAS_SVG = [
   { id: '05', nome: 'Negociação', valor: '74', percentual: '6%', baseColor: '#6611aa', topColor: '#200540', midColor: '#9944ff', sideColor: '#400870', y: 240, tw: 225, bw: 170, icone: <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12l2.5-2.5a3.5 3.5 0 0 1 5 0L12 12m10 0l-2.5-2.5a3.5 3.5 0 0 0-5 0L12 12m-6 6h12"></path></svg> },
   { id: '06', nome: 'Fechados', valor: '28', percentual: '2%', baseColor: '#11aa11', topColor: '#053305', midColor: '#44ff44', sideColor: '#0a660a', y: 295, tw: 185, bw: 130, icone: <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg> }
 ];
-
-const VENDAS = [0.2,0.62,0.88,1.16,1.08,1.42,1.25,1.7,1.95,1.58,1.82,2.18,2.04,2.34,2.25,2.42,2.31,2.68,2.94,2.76,3.18,3.42,3.3,3.72,3.62,4.18,4.62,5.2,5.62,5.36];
-const META = [0.55,0.86,1.08,1.24,1.24,1.42,1.66,1.84,2.02,2.02,2.16,2.28,2.28,2.44,2.58,2.68,2.74,2.9,3.04,3.16,3.3,3.42,3.56,3.72,3.86,4.02,4.18,4.38,4.58,4.78];
 
 export function PremiumSalesFunnel() {
   return (
@@ -84,29 +82,68 @@ export function PremiumSalesFunnel() {
   );
 }
 
-export function CompactSalesFunnel() {
-  const nomes = ['Novos Leads', 'Qualificados', 'Visitas', 'Propostas', 'Negociação', 'Fechados'];
-  const larguras = [100, 92, 84, 76, 68, 60];
+const NOMES_ETAPA_COMPACTA = ['Novos Leads', 'Qualificados', 'Visitas', 'Propostas', 'Negociação', 'Fechados'];
+
+interface EtapaFunilCompacto {
+  id: string;
+  nome: string;
+  valor: number;
+  percentual: number;
+  icone: JSX.Element;
+}
+
+/** Mesmo cálculo de SalesFunnelCard (components/sales-funnel-card.tsx) — mantém as duas telas consistentes. */
+function construirEtapasReais(dados: IndicadoresFunil): EtapaFunilCompacto[] {
+  const negociacoes = dados.oportunidadesPorEstagio.EM_CONTRAPROPOSTA
+    + dados.oportunidadesPorEstagio.RESERVA
+    + dados.oportunidadesPorEstagio.DOCUMENTACAO_CONCLUIDA;
+  const base = dados.leadsDistribuidos;
+  const valores = [
+    dados.leadsDistribuidos,
+    dados.leadsEmAtendimento,
+    dados.visitasRealizadas,
+    dados.propostasEnviadas,
+    negociacoes,
+    dados.fechamentos,
+  ];
+  return NOMES_ETAPA_COMPACTA.map((nome, indice) => ({
+    id: String(indice + 1).padStart(2, '0'),
+    nome,
+    valor: valores[indice],
+    percentual: indice === 0 ? (base > 0 ? 100 : 0) : (base > 0 ? Math.round((valores[indice] / base) * 100) : 0),
+    icone: ETAPAS_SVG[indice].icone,
+  }));
+}
+
+/** dados=undefined cobre "carregando" e "sem permissão" - nunca cai de volta pra número inventado. */
+export function CompactSalesFunnel({ dados }: { dados?: IndicadoresFunil }) {
   const [indiceAtivo, setIndiceAtivo] = useState<number | null>(null);
-  const etapaAtiva = indiceAtivo === null ? null : ETAPAS_SVG[indiceAtivo];
+
+  if (!dados) {
+    return <p style={{ color: 'var(--muted)', fontSize: 11, padding: '10px 2px' }}>Sem dados de funil disponíveis.</p>;
+  }
+
+  const etapas = construirEtapasReais(dados);
+  const etapaAtiva = indiceAtivo === null ? null : etapas[indiceAtivo];
+  const conversaoTotal = etapas[0].valor > 0 ? Math.round((etapas[5].valor / etapas[0].valor) * 1000) / 10 : 0;
 
   return (
     <div className="compact-sales-funnel">
       <div className="compact-sales-funnel__summary" aria-live="polite">
         <span key={`label-${indiceAtivo ?? 'conversion'}`}>
-          {etapaAtiva ? nomes[indiceAtivo!] : 'Conversão total'}
+          {etapaAtiva ? etapaAtiva.nome : 'Conversão total'}
         </span>
         <b key={`value-${indiceAtivo ?? 'conversion'}`}>
-          {etapaAtiva ? `${etapaAtiva.valor} · ${etapaAtiva.percentual}` : '2,2%'}
+          {etapaAtiva ? `${etapaAtiva.valor.toLocaleString('pt-BR')} · ${etapaAtiva.percentual}%` : `${conversaoTotal.toLocaleString('pt-BR')}%`}
         </b>
       </div>
       <ol aria-label="Resumo do funil de vendas">
-        {ETAPAS_SVG.map((etapa, indice) => (
+        {etapas.map((etapa, indice) => (
           <li
             className={indiceAtivo === indice ? 'compact-sales-funnel__stage--active' : ''}
             key={etapa.id}
             style={{
-              '--compact-width': `${larguras[indice]}%`,
+              '--compact-width': `${Math.max(18, etapa.percentual)}%`,
               '--compact-order': indice,
             } as CSSProperties}
           >
@@ -114,16 +151,16 @@ export function CompactSalesFunnel() {
             <button
               className="compact-sales-funnel__layer"
               type="button"
-              aria-label={`${nomes[indice]}: ${etapa.valor} leads, ${etapa.percentual}. Mostrar detalhes`}
+              aria-label={`${etapa.nome}: ${etapa.valor.toLocaleString('pt-BR')}, ${etapa.percentual}%. Mostrar detalhes`}
               aria-pressed={indiceAtivo === indice}
               onClick={() => setIndiceAtivo((atual) => atual === indice ? null : indice)}
             >
               <span className="compact-sales-funnel__icon" aria-hidden="true">{etapa.icone}</span>
               <span className="compact-sales-funnel__copy">
-                <b>{nomes[indice]}</b>
-                <small>{etapa.valor} leads</small>
+                <b>{etapa.nome}</b>
+                <small>{etapa.valor.toLocaleString('pt-BR')} leads</small>
               </span>
-              <strong>{etapa.percentual}</strong>
+              <strong>{etapa.percentual}%</strong>
             </button>
           </li>
         ))}
@@ -132,14 +169,36 @@ export function CompactSalesFunnel() {
   );
 }
 
-export function PremiumSalesPerformance() {
+export interface PontoVendasDia {
+  dia: number;
+  valor: number;
+}
+
+function formatarValorEixo(valor: number): string {
+  if (valor >= 1_000_000) return `${(valor / 1_000_000).toFixed(valor % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (valor >= 1_000) return `${Math.round(valor / 1_000)}K`;
+  return String(Math.round(valor));
+}
+
+/**
+ * Acumulado real de VGV fechado dia a dia no mês corrente (ver
+ * construirSerieVendasDoMes em app/page.tsx) - sem "Meta" comparativa, porque
+ * não existe meta/target de vendas cadastrado em nenhuma entidade do sistema
+ * (o "Meta do mês" do card lateral do menu é decorativo, não um dado real).
+ */
+export function PremiumSalesPerformance({ serie }: { serie: PontoVendasDia[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [indiceAtivo, setIndiceAtivo] = useState(17);
+  const [indiceAtivo, setIndiceAtivo] = useState(Math.max(0, serie.length - 1));
   const { tema } = useTheme();
 
   useEffect(() => {
+    setIndiceAtivo(Math.max(0, serie.length - 1));
+  }, [serie.length]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || serie.length === 0) return;
+    const valores = serie.map((ponto) => ponto.valor);
 
     function desenhar() {
       if (!canvas) return;
@@ -155,7 +214,6 @@ export function PremiumSalesPerformance() {
       const contextoSeguro = contexto;
       const estilos = getComputedStyle(document.documentElement);
       const primaria = estilos.getPropertyValue('--primary').trim() || '#3B82F6';
-      const secundaria = estilos.getPropertyValue('--secondary').trim() || '#22D3EE';
       const textoSecundario = estilos.getPropertyValue('--text-secondary').trim() || '#94A3B8';
       const borda = estilos.getPropertyValue('--border').trim() || '#323845';
       const comAlpha = (hex: string, alpha: number) => {
@@ -170,14 +228,18 @@ export function PremiumSalesPerformance() {
       const margem = { esquerda: 45, direita: 12, topo: 13, inferior: 27 };
       const areaLargura = largura - margem.esquerda - margem.direita;
       const areaAltura = altura - margem.topo - margem.inferior;
-      const x = (indice: number) => margem.esquerda + (indice / (VENDAS.length - 1)) * areaLargura;
-      const y = (valor: number) => margem.topo + areaAltura - (valor / 6) * areaAltura;
+      const n = serie.length;
+      const x = (indice: number) => margem.esquerda + (n <= 1 ? areaLargura : (indice / (n - 1)) * areaLargura);
+      const teto = Math.max(...valores, 1) * 1.15;
+      const y = (valor: number) => margem.topo + areaAltura - (valor / teto) * areaAltura;
 
       contexto.font = '11px Inter, Segoe UI, sans-serif';
       contexto.textAlign = 'right';
       contexto.textBaseline = 'middle';
-      for (let nivel = 0; nivel <= 6; nivel += 1) {
-        const posicaoY = y(nivel);
+      const niveis = 5;
+      for (let nivel = 0; nivel <= niveis; nivel += 1) {
+        const valorNivel = (teto / niveis) * nivel;
+        const posicaoY = y(valorNivel);
         contexto.strokeStyle = comAlpha(borda, nivel === 0 ? .72 : .42);
         contexto.lineWidth = 1;
         contexto.setLineDash(nivel === 0 ? [] : [3, 5]);
@@ -186,10 +248,11 @@ export function PremiumSalesPerformance() {
         contexto.lineTo(largura - margem.direita, posicaoY);
         contexto.stroke();
         contexto.fillStyle = textoSecundario;
-        contexto.fillText(nivel === 0 ? '0' : `${nivel}M`, margem.esquerda - 8, posicaoY);
+        contexto.fillText(nivel === 0 ? '0' : formatarValorEixo(valorNivel), margem.esquerda - 8, posicaoY);
       }
 
-      [0,4,9,14,19,24,29].forEach((indice) => {
+      const indicesRotulo = n <= 6 ? serie.map((_, indice) => indice) : [0, Math.round((n - 1) / 2), n - 1];
+      indicesRotulo.forEach((indice) => {
         const posicaoX = x(indice);
         contexto.strokeStyle = comAlpha(borda, .34);
         contexto.setLineDash([3, 6]);
@@ -199,43 +262,39 @@ export function PremiumSalesPerformance() {
         contexto.stroke();
         contexto.fillStyle = textoSecundario;
         contexto.textAlign = 'center';
-        contexto.fillText(String(indice + 1).padStart(2, '0'), posicaoX, altura - 9);
+        contexto.fillText(String(serie[indice].dia).padStart(2, '0'), posicaoX, altura - 9);
       });
 
-      function tracar(valores: number[]) {
+      function tracar(valoresLinha: number[]) {
         contextoSeguro.beginPath();
-        contextoSeguro.moveTo(x(0), y(valores[0]));
-        for (let indice = 1; indice < valores.length; indice += 1) {
+        contextoSeguro.moveTo(x(0), y(valoresLinha[0]));
+        if (valoresLinha.length === 1) {
+          contextoSeguro.lineTo(x(0) + 0.5, y(valoresLinha[0]));
+          return;
+        }
+        for (let indice = 1; indice < valoresLinha.length; indice += 1) {
           const anteriorX = x(indice - 1);
-          const anteriorY = y(valores[indice - 1]);
+          const anteriorY = y(valoresLinha[indice - 1]);
           const atualX = x(indice);
-          const atualY = y(valores[indice]);
+          const atualY = y(valoresLinha[indice]);
           const meioX = (anteriorX + atualX) / 2;
           contextoSeguro.quadraticCurveTo(anteriorX, anteriorY, meioX, (anteriorY + atualY) / 2);
         }
-        contextoSeguro.lineTo(x(valores.length - 1), y(valores[valores.length - 1]));
+        contextoSeguro.lineTo(x(valoresLinha.length - 1), y(valoresLinha[valoresLinha.length - 1]));
       }
 
       const gradiente = contexto.createLinearGradient(0, margem.topo, 0, altura - margem.inferior);
       gradiente.addColorStop(0, comAlpha(primaria, .42));
       gradiente.addColorStop(0.62, comAlpha(primaria, .16));
       gradiente.addColorStop(1, comAlpha(primaria, .01));
-      tracar(VENDAS);
-      contexto.lineTo(x(VENDAS.length - 1), altura - margem.inferior);
+      tracar(valores);
+      contexto.lineTo(x(valores.length - 1), altura - margem.inferior);
       contexto.lineTo(x(0), altura - margem.inferior);
       contexto.closePath();
       contexto.fillStyle = gradiente;
       contexto.fill();
 
-      tracar(META);
-      contexto.strokeStyle = secundaria;
-      contexto.lineWidth = 2;
-      contexto.setLineDash([7, 6]);
-      contexto.shadowColor = comAlpha(secundaria, .28);
-      contexto.shadowBlur = 3;
-      contexto.stroke();
-
-      tracar(VENDAS);
+      tracar(valores);
       contexto.strokeStyle = primaria;
       contexto.lineWidth = 2;
       contexto.setLineDash([]);
@@ -244,7 +303,8 @@ export function PremiumSalesPerformance() {
       contexto.stroke();
       contexto.shadowBlur = 0;
 
-      const ativoX = x(indiceAtivo);
+      const idx = Math.min(indiceAtivo, valores.length - 1);
+      const ativoX = x(idx);
       contexto.strokeStyle = comAlpha(textoSecundario, .42);
       contexto.lineWidth = 1;
       contexto.setLineDash([]);
@@ -253,50 +313,60 @@ export function PremiumSalesPerformance() {
       contexto.lineTo(ativoX, altura - margem.inferior);
       contexto.stroke();
 
-      [[VENDAS[indiceAtivo], primaria], [META[indiceAtivo], secundaria]].forEach(([valor, cor]) => {
-        contexto.beginPath();
-        contexto.arc(ativoX, y(Number(valor)), 4.5, 0, Math.PI * 2);
-        contexto.fillStyle = String(cor);
-        contexto.shadowColor = String(cor);
-        contexto.shadowBlur = 5;
-        contexto.fill();
-        contexto.shadowBlur = 0;
-      });
+      contexto.beginPath();
+      contexto.arc(ativoX, y(valores[idx]), 4.5, 0, Math.PI * 2);
+      contexto.fillStyle = primaria;
+      contexto.shadowColor = primaria;
+      contexto.shadowBlur = 5;
+      contexto.fill();
+      contexto.shadowBlur = 0;
     }
 
     const observador = new ResizeObserver(desenhar);
     observador.observe(canvas);
     desenhar();
     return () => observador.disconnect();
-  }, [indiceAtivo, tema]);
+  }, [indiceAtivo, tema, serie]);
+
+  if (serie.length === 0) {
+    return (
+      <div className="sales-performance">
+        <div className="sales-performance__legend"><span><i />Vendas fechadas este mês</span></div>
+        <p style={{ color: 'var(--muted)', fontSize: 11, padding: '30px 12px', textAlign: 'center' }}>Nenhuma venda fechada neste mês ainda.</p>
+      </div>
+    );
+  }
 
   function moverPonteiro(evento: PointerEvent<HTMLCanvasElement>) {
     const caixa = evento.currentTarget.getBoundingClientRect();
     const areaUtil = caixa.width - 57;
     const relativo = Math.min(1, Math.max(0, (evento.clientX - caixa.left - 45) / areaUtil));
-    setIndiceAtivo(Math.round(relativo * (VENDAS.length - 1)));
+    setIndiceAtivo(Math.round(relativo * (serie.length - 1)));
   }
 
-  const esquerdaTooltip = 12 + (indiceAtivo / (VENDAS.length - 1)) * 82;
-  const topoTooltip = 12 + (1 - VENDAS[indiceAtivo] / 6) * 54;
+  const idxAtivo = Math.min(indiceAtivo, serie.length - 1);
+  const pontoAtivo = serie[idxAtivo];
+  const tetoTooltip = Math.max(...serie.map((p) => p.valor), 1) * 1.15;
+  const esquerdaTooltip = 12 + (serie.length <= 1 ? 0 : (idxAtivo / (serie.length - 1)) * 82);
+  const topoTooltip = 12 + (1 - pontoAtivo.valor / tetoTooltip) * 54;
+  const nomeMes = new Date().toLocaleDateString('pt-BR', { month: 'long' });
 
   return (
     <div className="sales-performance">
-      <div className="sales-performance__legend"><span><i />Vendas</span><span><i />Meta</span></div>
+      <div className="sales-performance__legend"><span><i />Vendas fechadas (acumulado do mês)</span></div>
       <div className="sales-performance__canvas-wrap">
         <canvas
           ref={canvasRef}
           onPointerMove={moverPonteiro}
-          aria-label="Gráfico de vendas e meta dos últimos 30 dias"
+          aria-label="Gráfico de vendas fechadas acumuladas no mês atual"
           role="img"
         />
         <div
-          className={`sales-performance__tooltip ${indiceAtivo > 22 ? 'sales-performance__tooltip--left' : ''}`}
+          className={`sales-performance__tooltip ${idxAtivo > serie.length * 0.7 ? 'sales-performance__tooltip--left' : ''}`}
           style={{ left: `${esquerdaTooltip}%`, top: `${topoTooltip}%` }}
         >
-          <small>{indiceAtivo + 1} de Maio</small>
-          <b><i />Vendas: R$ {(VENDAS[indiceAtivo] * 1_000_000).toLocaleString('pt-BR')}</b>
-          <b><i />Meta: R$ {(META[indiceAtivo] * 1_000_000).toLocaleString('pt-BR')}</b>
+          <small>{String(pontoAtivo.dia).padStart(2, '0')} de {nomeMes}</small>
+          <b><i />Vendas: R$ {pontoAtivo.valor.toLocaleString('pt-BR')}</b>
         </div>
       </div>
     </div>
