@@ -143,7 +143,12 @@ export function CompactSalesFunnel({ dados }: { dados?: IndicadoresFunil }) {
             className={indiceAtivo === indice ? 'compact-sales-funnel__stage--active' : ''}
             key={etapa.id}
             style={{
-              '--compact-width': `${Math.max(18, etapa.percentual)}%`,
+              // Piso de 55% (nao 18%): .compact-sales-funnel__layer tem largura=var(--compact-width)
+              // e o texto (nome + "X leads") usa overflow:hidden/ellipsis - com poucos leads reais
+              // o percentual de etapas avancadas cai bem abaixo de 55% e a barra fica estreita demais
+              // pro texto caber, sumindo visualmente (o numero em si continua exato, so a largura da
+              // barra e decorativa a partir daqui).
+              '--compact-width': `${Math.min(100, Math.max(55, etapa.percentual))}%`,
               '--compact-order': indice,
             } as CSSProperties}
           >
