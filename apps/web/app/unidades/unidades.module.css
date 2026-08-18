@@ -101,11 +101,15 @@
 .pulseVisual{height:247px;display:flex;align-items:center;justify-content:center;gap:17px}
 .healthRing{flex:0 0 190px;width:190px;height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle,#0b1724 58%,transparent 60%),conic-gradient(#37bd56 0 94%,#1b2a37 94%);box-shadow:0 0 0 13px rgba(50,184,81,.06)}
 .healthRing strong{font-size:38px}.healthRing small{margin-top:7px;color:#32b953;font-size:14px}
+.healthUnavailable{background:radial-gradient(circle,#0b1724 58%,transparent 60%),conic-gradient(#536274 0 22%,#1b2a37 22%)}.healthUnavailable small{color:#8e9baa}
 .sparkline{width:82px;height:92px;position:relative}.sparkline i{position:absolute;width:31px;height:4px;border-radius:3px;background:#36bd56;transform-origin:left center}
+.sparklineUnavailable{opacity:.2;filter:grayscale(1)}
 .sparkline i:nth-child(1){left:0;top:63px}.sparkline i:nth-child(2){left:25px;top:64px;transform:rotate(-48deg)}.sparkline i:nth-child(3){left:43px;top:40px;transform:rotate(58deg)}.sparkline i:nth-child(4){left:58px;top:64px;transform:rotate(-58deg)}.sparkline i:nth-child(5){left:73px;top:37px}
 .pulseCard p{margin:0 0 23px;color:#a3adba;text-align:center;font-size:16px;line-height:1.7}.pulseCard p strong{margin-right:8px;color:#39c960;font-size:22px}.pulseCard p span{margin-left:65px}
+.pulseCard p .syncMessage{margin-left:0;color:#8e9baa}
 .pulseCard>button,.rankingCard>button{width:100%;height:59px;border:1px solid #21364a;border-radius:9px;background:#0b1724;color:#d4dbe3;font-size:15px;font-weight:700}
 .rankingCard{height:507px;padding:27px 24px 23px}.rankingCard ol{list-style:none;margin:18px 0 16px;padding:0}
+.rankingUnavailable{height:302px;display:grid;place-items:center;color:#8290a0;font-size:12px;text-align:center}
 .rankingCard li{min-height:95px;display:grid;grid-template-columns:18px 50px 1fr auto;gap:10px;align-items:center}
 .rank{color:#8c98a7;font-size:13px}.rankPhoto{width:50px;height:50px;border-radius:8px}
 .rankCopy{min-width:0;display:flex;flex-direction:column}.rankCopy>b{overflow:hidden;text-overflow:ellipsis;font-size:13px;white-space:nowrap}.rankCopy small{margin-top:5px;color:#8592a2;font-size:11px}

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { Unidade } from '@crm/shared';
 import { useAuth } from '../../components/auth-context';
-import { apiFetch } from '../../lib/api';
+import { ApiError, apiFetch } from '../../lib/api';
 import styles from './unidades.module.css';
 
 type Aba = 'todas' | 'ativas' | 'matriz' | 'filiais' | 'inativas';
@@ -25,7 +25,22 @@ export default function UnidadesPage() {
   const [nomeFantasia,setNomeFantasia]=useState(''); const [eMatriz,setEMatriz]=useState(false); const [unidades,setUnidades]=useState<Unidade[]>([]); const [erro,setErro]=useState<string|null>(null); const [carregando,setCarregando]=useState(true); const [salvando,setSalvando]=useState(false);
   const [modalAberto,setModalAberto]=useState(false); const [busca,setBusca]=useState(''); const [aba,setAba]=useState<Aba>('todas'); const [visualizacao,setVisualizacao]=useState<Visualizacao>('cards'); const [filtroAberto,setFiltroAberto]=useState(false); const [mensagem,setMensagem]=useState<string|null>(null);
 
-  async function carregar(){setCarregando(true);try{setUnidades(await apiFetch<Unidade[]>('/unidades'));setErro(null);}catch{setErro('Não foi possível atualizar as unidades agora.');}finally{setCarregando(false);}}
+  async function carregar(){
+    setCarregando(true);
+    let ultimaFalha: unknown;
+    for(let tentativa=0;tentativa<3;tentativa+=1){
+      try{
+        const resultado=await apiFetch<Unidade[]>('/unidades');
+        if(!Array.isArray(resultado))throw new Error('Formato inesperado na resposta de unidades.');
+        setUnidades(resultado);setErro(null);setCarregando(false);return;
+      }catch(falha){
+        ultimaFalha=falha;
+        if(tentativa<2)await new Promise((resolver)=>window.setTimeout(resolver,400*(tentativa+1)));
+      }
+    }
+    const detalhe=ultimaFalha instanceof ApiError?(ultimaFalha.backendMessage??`erro HTTP ${ultimaFalha.status}`):'serviço indisponível';
+    setErro(`Não foi possível atualizar as unidades (${detalhe}).`);setCarregando(false);
+  }
   useEffect(()=>{void carregar();},[sessao?.tenantId]);
   useEffect(()=>{if(!mensagem)return;const timer=window.setTimeout(()=>setMensagem(null),2600);return()=>window.clearTimeout(timer);},[mensagem]);
   useEffect(()=>{const abrirPeloHash=()=>{if(window.location.hash==='#nova-unidade')setModalAberto(true);};abrirPeloHash();window.addEventListener('hashchange',abrirPeloHash);return()=>window.removeEventListener('hashchange',abrirPeloHash);},[]);
@@ -34,16 +49,17 @@ export default function UnidadesPage() {
   const unidadesFiltradas=useMemo(()=>unidades.filter((unidade,index)=>{const meta=metadata(index);const termo=`${unidade.nomeFantasia} ${meta.cidade} ${meta.estado} ${meta.responsavel}`.toLocaleLowerCase('pt-BR');const correspondeBusca=termo.includes(busca.trim().toLocaleLowerCase('pt-BR'));const correspondeAba=aba==='todas'||(aba==='ativas'&&unidade.status==='ATIVA')||(aba==='inativas'&&unidade.status==='INATIVA')||(aba==='matriz'&&unidade.eMatriz)||(aba==='filiais'&&!unidade.eMatriz);return correspondeBusca&&correspondeAba;}),[aba,busca,unidades]);
   const totalAtivas=unidades.filter((unidade)=>unidade.status==='ATIVA').length;
   const totalImoveis=unidades.reduce((total,_unidade,index)=>total+metadata(index).imoveis,0); const totalLeads=unidades.reduce((total,_unidade,index)=>total+metadata(index).leads,0); const pipelineTotal=unidades.reduce((total,_unidade,index)=>total+metadata(index).pipeline,0);
+  const dadosDisponiveis=!(erro&&unidades.length===0);
   if(!sessao)return null;
 
   return <main className={styles.page}>
     <div className={styles.contentGrid}>
       <section className={styles.workspace}>
     <section className={styles.metrics} aria-label="Resumo da rede">
-      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.blue}`}><span className="fluent">&#xE716;</span></span><div><strong>{String(unidades.length).padStart(2,'0')}</strong><b>Unidades</b><small>{String(totalAtivas).padStart(2,'0')} ativas</small></div></article>
-      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.green}`}><span className="fluent">&#xE821;</span></span><div><strong>{totalImoveis}</strong><b>Imóveis</b><small>+12 este mês</small></div></article>
-      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.purple}`}><span className="fluent">&#xE716;</span></span><div><strong>{totalLeads}</strong><b>Leads ativos</b><small>34 novos hoje</small></div></article>
-      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.gold}`}><span className="fluent">&#xE9D2;</span></span><div><strong>{pipelineTotal>=1000000?`R$ ${(pipelineTotal/1000000).toFixed(1).replace('.',',')} mi`:moeda(pipelineTotal)}</strong><b>Em negociações</b><small>Pipeline total</small></div></article>
+      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.blue}`}><span className="fluent">&#xE7F4;</span></span><div><strong>{erro&&!unidades.length?'—':String(unidades.length).padStart(2,'0')}</strong><b>Unidades</b><small>{erro&&!unidades.length?'Dados indisponíveis':`${String(totalAtivas).padStart(2,'0')} ativas`}</small></div></article>
+      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.green}`}><span className="fluent">&#xE80F;</span></span><div><strong>{erro&&!unidades.length?'—':totalImoveis}</strong><b>Imóveis</b><small>{erro&&!unidades.length?'Aguardando sincronização':'+12 este mês'}</small></div></article>
+      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.purple}`}><span className="fluent">&#xE716;</span></span><div><strong>{erro&&!unidades.length?'—':totalLeads}</strong><b>Leads ativos</b><small>{erro&&!unidades.length?'Aguardando sincronização':'34 novos hoje'}</small></div></article>
+      <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.gold}`}><span className="fluent">&#xE9D2;</span></span><div><strong>{erro&&!unidades.length?'—':pipelineTotal>=1000000?`R$ ${(pipelineTotal/1000000).toFixed(1).replace('.',',')} mi`:moeda(pipelineTotal)}</strong><b>Em negociações</b><small>{erro&&!unidades.length?'Aguardando sincronização':'Pipeline total'}</small></div></article>
     </section>
         <div className={styles.toolbar}>
           <label className={styles.searchBox}><span className="fluent">&#xE721;</span><input id="unit-search" value={busca} onChange={(evento)=>setBusca(evento.target.value)} placeholder="Buscar unidade, cidade ou responsável..."/>{busca&&<button type="button" onClick={()=>setBusca('')} aria-label="Limpar busca">×</button>}</label>
@@ -57,7 +73,7 @@ export default function UnidadesPage() {
           {unidadesFiltradas.map((unidade)=>{const indexOriginal=unidades.findIndex((item)=>item.id===unidade.id);const meta=metadata(indexOriginal);const saudavel=meta.desempenho>=80;return <article key={unidade.id} className={`${styles.unitCard} ${indexOriginal===0?styles.featuredCard:''}`}>
             <header className={styles.cardHeader}><span className={`${styles.typeTag} ${unidade.eMatriz?styles.typeMatriz:''}`}>{unidade.eMatriz?'Matriz':'Filial'}</span><span className={`${styles.status} ${unidade.status==='INATIVA'||!saudavel?styles.attention:''}`}><i/>{unidade.status==='INATIVA'?'Inativa':saudavel?'Ativa':'Atenção'}</span><button type="button" aria-label={`Mais opções para ${unidade.nomeFantasia}`} onClick={()=>setMensagem(`Opções de ${unidade.nomeFantasia}`)}>•••</button></header>
             <div className={styles.cardIdentity}><div className={`${styles.unitPhoto} ${styles[`photo${(indexOriginal%3)+1}`]}`} role="img" aria-label={`Fachada de ${unidade.nomeFantasia}`}/><div><h2>{unidade.nomeFantasia}</h2><p>{meta.cidade} • {meta.estado}</p><small><span className="fluent">&#xE707;</span> {unidade.eMatriz?'Matriz':'Filial'}</small></div></div>
-            <div className={styles.cardStats}><div><span className="fluent">&#xE716;</span><b>{String(meta.corretores).padStart(2,'0')}</b><small>Corretores</small></div><div><span className="fluent">&#xE821;</span><b>{meta.imoveis}</b><small>Imóveis</small></div><div><span className="fluent">&#xE77B;</span><b>{meta.leads}</b><small>Leads</small></div><div><span className="fluent">&#xE81C;</span><b>{String(meta.negociacoes).padStart(2,'0')}</b><small>Negociações</small></div></div>
+            <div className={styles.cardStats}><div><span className="fluent">&#xE716;</span><b>{String(meta.corretores).padStart(2,'0')}</b><small>Corretores</small></div><div><span className="fluent">&#xE80F;</span><b>{meta.imoveis}</b><small>Imóveis</small></div><div><span className="fluent">&#xE77B;</span><b>{meta.leads}</b><small>Leads</small></div><div><span className="fluent">&#xE81C;</span><b>{String(meta.negociacoes).padStart(2,'0')}</b><small>Negociações</small></div></div>
             <div className={styles.pipeline}><div><small>Pipeline atual</small><strong>{moeda(meta.pipeline)}</strong></div><span className={meta.variacao>=0?styles.positive:styles.negative}>{meta.variacao>=0?'+':''}{String(meta.variacao).replace('.',',')}% {meta.variacao>=0?'↗':'↘'}</span><i><b style={{width:`${Math.min(100,meta.desempenho)}%`}}/></i></div>
             <div className={styles.owner}><span className={styles.ownerAvatar}>{meta.iniciais}</span><small>Responsável: <b>{meta.responsavel}</b></small><time>Última atividade: {meta.atividade} <i/></time></div>
             <footer className={styles.cardActions}><button type="button" onClick={()=>setMensagem(`${unidade.nomeFantasia} selecionada`)}><span className="fluent">&#xE8A7;</span> Abrir unidade</button><Link href={`/?unidade=${encodeURIComponent(unidade.id)}`}><span className="fluent">&#xE80F;</span> Dashboard <b>›</b></Link></footer>
@@ -67,8 +83,8 @@ export default function UnidadesPage() {
       </section>
 
       <aside className={styles.insights}>
-        <section className={styles.pulseCard}><h2>Pulso da Rede</h2><div className={styles.pulseVisual}><div className={styles.healthRing}><strong>94%</strong><small>Rede saudável</small></div><div className={styles.sparkline}><i/><i/><i/><i/><i/></div></div><p><strong>↑ 12,4%</strong> desempenho<br/><span>no mês</span></p><button type="button" onClick={()=>setMensagem('Análise completa em preparação')}>Ver análise completa</button></section>
-        <section className={styles.rankingCard}><h2>Desempenho das unidades</h2><ol>{unidades.slice(0,3).map((unidade,index)=>{const meta=metadata(index);return <li key={unidade.id}><span className={styles.rank}>{index+1}</span><div className={`${styles.rankPhoto} ${styles[`photo${index+1}`]}`}/><div className={styles.rankCopy}><b>{unidade.nomeFantasia}</b><small>{meta.cidade} • {meta.estado}</small><i><b style={{width:`${meta.desempenho}%`}}/></i></div><strong className={meta.desempenho<80?styles.rankWarning:''}>{meta.desempenho}%</strong></li>;})}</ol><button type="button" onClick={()=>setMensagem('Comparação atualizada')}><span className="fluent">&#xE9D2;</span> Comparar unidades</button></section>
+        <section className={styles.pulseCard}><h2>Pulso da Rede</h2><div className={styles.pulseVisual}><div className={`${styles.healthRing} ${!dadosDisponiveis?styles.healthUnavailable:''}`}><strong>{dadosDisponiveis?'94%':'—'}</strong><small>{dadosDisponiveis?'Rede saudável':'Dados indisponíveis'}</small></div><div className={`${styles.sparkline} ${!dadosDisponiveis?styles.sparklineUnavailable:''}`}><i/><i/><i/><i/><i/></div></div><p>{dadosDisponiveis?<><strong>↑ 12,4%</strong> desempenho<br/><span>no mês</span></>:<span className={styles.syncMessage}>Aguardando sincronização</span>}</p><button type="button" disabled={!dadosDisponiveis} onClick={()=>setMensagem('Análise completa em preparação')}>Ver análise completa</button></section>
+        <section className={styles.rankingCard}><h2>Desempenho das unidades</h2>{unidades.length?<ol>{unidades.slice(0,3).map((unidade,index)=>{const meta=metadata(index);return <li key={unidade.id}><span className={styles.rank}>{index+1}</span><div className={`${styles.rankPhoto} ${styles[`photo${index+1}`]}`}/><div className={styles.rankCopy}><b>{unidade.nomeFantasia}</b><small>{meta.cidade} • {meta.estado}</small><i><b style={{width:`${meta.desempenho}%`}}/></i></div><strong className={meta.desempenho<80?styles.rankWarning:''}>{meta.desempenho}%</strong></li>;})}</ol>:<div className={styles.rankingUnavailable}>Sem dados de desempenho no momento.</div>}<button type="button" disabled={!unidades.length} onClick={()=>setMensagem('Comparação atualizada')}><span className="fluent">&#xE9D2;</span> Comparar unidades</button></section>
       </aside>
     </div>
     {mensagem&&<div className={styles.toast} role="status">{mensagem}</div>}
