@@ -143,12 +143,15 @@ export function CompactSalesFunnel({ dados }: { dados?: IndicadoresFunil }) {
             className={indiceAtivo === indice ? 'compact-sales-funnel__stage--active' : ''}
             key={etapa.id}
             style={{
-              // Piso de 55% (nao 18%): .compact-sales-funnel__layer tem largura=var(--compact-width)
-              // e o texto (nome + "X leads") usa overflow:hidden/ellipsis - com poucos leads reais
-              // o percentual de etapas avancadas cai bem abaixo de 55% e a barra fica estreita demais
-              // pro texto caber, sumindo visualmente (o numero em si continua exato, so a largura da
-              // barra e decorativa a partir daqui).
-              '--compact-width': `${Math.min(100, Math.max(55, etapa.percentual))}%`,
+              // Largura FIXA por posicao (nunca o percentual real): nenhum piso
+              // resolve de vez, porque o texto (nome + "X leads") fica DENTRO da
+              // barra com overflow:hidden - com poucos leads reais o percentual de
+              // uma etapa avancada pode ser baixo o bastante pra truncar ate nomes
+              // curtos. A largura aqui e só o efeito visual de "funil estreitando",
+              // nunca foi (nem antes, com dado fake) uma leitura precisa de dado -
+              // quem informa o valor real é o número "{percentual}%" impresso, que
+              // nunca é cortado.
+              '--compact-width': `${[100, 92, 84, 76, 68, 60][indice]}%`,
               '--compact-order': indice,
             } as CSSProperties}
           >
