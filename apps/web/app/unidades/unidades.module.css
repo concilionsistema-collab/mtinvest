@@ -131,8 +131,8 @@
 
 @media(max-width:1750px){.contentGrid{grid-template-columns:minmax(0,1fr) 318px;gap:22px}.metric{padding:17px;gap:14px}.metricIcon{flex-basis:76px;width:76px;height:76px;font-size:34px}.metric strong{font-size:27px}.metric b{font-size:15px}.metric small{font-size:11px}.unitCard{padding-inline:17px}.cardIdentity{grid-template-columns:35% 1fr;gap:12px}.cardIdentity h2{font-size:17px}.cardStats>div{padding-inline:6px}.cardStats span{font-size:18px}.owner small{display:none}.pulseCard{padding-inline:18px}.healthRing{flex-basis:164px;width:164px;height:164px}.rankingCard{padding-inline:18px}}
 @media(max-width:1380px){.toolbar{grid-template-columns:minmax(220px,1fr) 170px 210px}.tabs button{min-width:auto;padding-inline:16px}.viewToggle button{min-width:100px}.cardsGrid{gap:12px}.unitCard{height:540px}.cardIdentity{height:125px}.unitPhoto{height:105px}.cardStats{height:78px}.pipeline{height:98px}.owner{height:68px}.cardActions{height:52px}.cardIdentity h2{font-size:15px}.cardIdentity p{font-size:13px}.cardStats small{font-size:8px}.pipeline strong{font-size:17px}.pagination{font-size:11px}}
-@media(min-width:761px) and (max-width:1120px){
-  .contentGrid{grid-template-columns:minmax(0,1fr) 190px;gap:16px}
+@media(min-width:761px) and (max-width:1380px){
+  .contentGrid{grid-template-columns:minmax(0,1fr) 220px;gap:14px}
   .workspace{padding-top:20px}
   .metrics{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
   .metric{height:82px;padding:10px 11px;gap:9px;border-radius:10px}
@@ -147,7 +147,7 @@
   .tabs button{min-width:51px;padding:0 10px;border-bottom-width:3px;font-size:10px}
   .viewToggle{margin:5px 7px;border-radius:6px}.viewToggle button{min-width:68px;padding:0 8px;font-size:9px}.viewToggle button span{margin-right:4px;font-size:12px}
   .cardsGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-  .unitCard{height:390px;padding:12px;border-radius:11px}
+  .unitCard{height:370px;padding:12px;border-radius:11px}
   .cardHeader{height:27px}.typeTag{padding:5px 9px;font-size:8px}.status{gap:4px;font-size:8px}.status i{width:6px;height:6px}.cardHeader>button{width:24px;height:24px;font-size:8px}
   .cardIdentity{height:96px;grid-template-columns:37% 1fr;gap:9px}.unitPhoto{height:80px;border-radius:6px}
   .cardIdentity h2{margin-bottom:4px;font-size:12px}.cardIdentity p{margin-bottom:5px;font-size:9px}.cardIdentity small{gap:3px;font-size:8px}.cardIdentity small span{font-size:10px}

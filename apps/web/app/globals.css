@@ -754,3 +754,11 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   .lead-kanban{min-width:1025px;grid-template-columns:repeat(auto-fill,205px);padding:0 8px 8px}
   .lead-kanban-column{min-width:205px}
 }
+
+.app-header--units{gap:14px}
+.app-header--units .header-page-title{width:320px;min-width:280px}
+.app-header--units .units-header-search{margin-left:auto}
+.app-header--units .header-actions{flex:0 0 auto}
+.app-header--units .user{flex:0 0 auto}
+@media(max-width:1250px){.app-header--units .header-page-title{display:flex;width:250px;min-width:220px}.app-header--units .header-page-title b{font-size:17px}.app-header--units .header-page-title small{font-size:9px}}
+@media(max-width:820px){.app-header--units .header-page-title{display:none}}
