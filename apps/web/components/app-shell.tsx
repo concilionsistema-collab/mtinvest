@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { StatusAssinatura } from '@crm/shared';
+import type { StatusAssinatura, Tarefa, Usuario } from '@crm/shared';
 import { useAuth } from './auth-context';
 import { TopThemeSelector } from './top-theme-selector';
 import { FloatingAI } from './floating-ai';
@@ -14,6 +14,16 @@ function assinaturaBloqueada(status: StatusAssinatura): boolean {
   if (status.status === 'INADIMPLENTE' || status.status === 'CANCELADA') return true;
   if (status.status === 'TRIAL' && status.trialFimEm) return new Date(status.trialFimEm).getTime() <= Date.now();
   return false;
+}
+
+const ROTULOS_PERFIL: Record<Usuario['perfil'], string> = {
+  GESTOR_UNIDADE: 'Gestor de unidade',
+  CORRETOR: 'Corretor',
+};
+
+function iniciaisDe(nome: string): string {
+  const partes = nome.trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? partes[0]?.[1] ?? '')).toUpperCase();
 }
 
 const nav = [
@@ -51,6 +61,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [presentationOpen, setPresentationOpen] = useState(false);
   const [statusAssinatura, setStatusAssinatura] = useState<StatusAssinatura | null>(null);
   const [abrindoCheckout, setAbrindoCheckout] = useState(false);
+  const [usuarioAtual, setUsuarioAtual] = useState<Usuario | null>(null);
+  const [tarefas, setTarefas] = useState<Tarefa[] | null>(null);
   const headerActionsRef=useRef<HTMLDivElement>(null);
   const tituloPagina=nav.find((item)=>item.href===pathname)?.label ?? 'CIONLARIS';
   const novoHref=pathname==='/imoveis'?'/imoveis#novo-imovel':pathname==='/oportunidades'?'/oportunidades#nova-negociacao':'/leads#novo-lead';
@@ -61,6 +73,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   // com a assinatura ja vencida, senao o bloqueio abaixo nunca conseguiria
   // se autoconsultar.
   useEffect(()=>{if(!sessao)return;apiFetch<StatusAssinatura>('/billing/status').then(setStatusAssinatura).catch(()=>{});},[sessao?.tenantId]);
+  useEffect(()=>{if(!sessao)return;apiFetch<Usuario>('/usuarios/me').then(setUsuarioAtual).catch(()=>{});},[sessao?.tenantId]);
+  useEffect(()=>{if(!sessao)return;apiFetch<Tarefa[]>('/tarefas').then(setTarefas).catch(()=>{});},[sessao?.tenantId]);
+
+  const tarefasPendentes = tarefas ? tarefas.filter((t)=>!t.concluida).length : null;
+  const percentualTarefasConcluidas = tarefas && tarefas.length>0 ? Math.round((tarefas.filter((t)=>t.concluida).length/tarefas.length)*100) : 0;
 
   async function iniciarCheckout(){
     setAbrindoCheckout(true);
@@ -88,7 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="brand tenant-brand"><div className="tenant-brand__identity"><img src="/mt-invest-shield.png" alt="Escudo MT INVEST"/><img src="/mt-invest-wordmark.png" alt="MT INVEST"/></div><button type="button" onClick={()=>setMenuRecolhido((atual)=>!atual)} aria-label={menuRecolhido?'Expandir menu':'Recolher menu'} aria-expanded={!menuRecolhido}>☰</button></div>
       <nav>{nav.map((item,index)=><Link key={item.href} href={item.href} aria-label={item.label} title={item.label} className={pathname===item.href?'active':''}><span className={`premium-nav-icon premium-nav-icon--${index+1}`}><span className="fluent" aria-hidden="true">{item.icon}</span></span><b>{item.label}</b><i aria-hidden="true">›</i></Link>)}</nav>
       <div className="mobile-card"><div className="phone-mock"><span>⌂</span><span>◫</span><span>♙</span><span>▦</span></div><div><b>CIONLARIS</b><small>Mobile</small><p>Gerencie seu negócio<br/>de onde estiver.</p><em> App Store</em><em>▶ Google Play</em></div></div>
-      {pathname==='/imoveis'?<div className="property-sidebar-summary"><b>Resumo de Imóveis</b><ul><li><span>Total de imóveis</span><strong>356</strong></li><li><span>Disponíveis</span><strong>248</strong></li><li><span>Em negociação</span><strong>78</strong></li><li><span>Vendidos (mês)</span><strong>30</strong></li></ul></div>:pathname==='/oportunidades'?<div className="negotiation-sidebar-user"><span className="avatar avatar--joao" role="img" aria-label="Foto de João Corretor">JC</span><div><b>João Corretor</b><small>joao@imobicrm.com</small></div><button>⌄</button></div>:<div className="goal-card"><div><b>Meta do mês</b><span>ⓘ</span></div><div className="goal-body"><div className="goal-ring">72%</div><p><strong>R$ 144.000</strong><small>de R$ 200.000</small><small>Meta de vendas</small></p></div></div>}
+      <Link href="/tarefas" className="goal-card" style={{display:'block',textDecoration:'none',color:'inherit'}}><div><b>Minhas Tarefas</b><span>ⓘ</span></div><div className="goal-body"><div className="goal-ring">{tarefas?`${percentualTarefasConcluidas}%`:'…'}</div><p><strong>{tarefasPendentes??'…'}</strong><small>pendente(s)</small><small>{tarefas?`${percentualTarefasConcluidas}% concluídas`:'Carregando...'}</small></p></div></Link>
       <div className="system-creator-brand"><small>CRM desenvolvido por</small><img src="/cionlaris-logo-transparent.png" alt="CIONLARIS CRM Imobiliário by Concilion"/></div>
     </aside>
     <div className="app-main"><header className="app-header"><div className="header-page-title"><b>{tituloPagina}</b><small>{pathname==='/'?'Visão geral do negócio':pathname==='/leads'?'Gerencie seus leads e transforme oportunidades em vendas':pathname==='/imoveis'?'Gerencie seu portfólio de imóveis e acompanhe o desempenho de vendas':pathname==='/oportunidades'?'Acompanhe o andamento de todas as negociações':'Gestão imobiliária'}</small></div><div className="search"><span className="fluent">&#xE721;</span><input aria-label="Buscar" placeholder={pathname==='/imoveis'?'Buscar imóveis, leads, proprietários, bairros...':pathname==='/oportunidades'?'Buscar negociações, leads, imóveis ou clientes...':'Buscar leads, clientes, imóveis, oportunidades...'}/><span className="fluent">&#xE11A;</span></div>
@@ -106,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {menuCabecalho==='mensagens'&&<><header><div><b>Mensagens</b><small>Conversas recentes</small></div><span className="online-dot">Online</span></header><ul><li><span className="message-avatar">MS</span><div><b>Maria Silva</b><small>Enviei os documentos do imóvel.</small></div><time>09:42</time></li><li><span className="message-avatar message-avatar--2">CE</span><div><b>Carlos Eduardo</b><small>Podemos confirmar a visita de amanhã?</small></div><time>09:18</time></li><li><span className="message-avatar message-avatar--3">AP</span><div><b>Ana Paula</b><small>Gostaria de revisar a proposta.</small></div><time>Ontem</time></li></ul><footer><Link href="/leads">Ver todas as conversas</Link></footer></>}
         </section>}
       </div>
-      <div className="user"><span className="avatar avatar--joao" role="img" aria-label="Foto de João Corretor">JC</span><div><b>João Corretor</b><small>Administrador</small></div><button onClick={()=>{logout();router.replace('/login');}} aria-label="Sair">⌄</button></div></header><div className="app-shell">{children}</div>
+      <div className="user"><span className="avatar" role="img" aria-label={usuarioAtual?`Foto de ${usuarioAtual.nome}`:'Carregando avatar'}>{usuarioAtual?iniciaisDe(usuarioAtual.nome):'…'}</span><div><b>{usuarioAtual?.nome??'Carregando...'}</b><small>{usuarioAtual?ROTULOS_PERFIL[usuarioAtual.perfil]:''}</small></div><button onClick={()=>{logout();router.replace('/login');}} aria-label="Sair">⌄</button></div></header><div className="app-shell">{children}</div>
       <FloatingAI />
       <PresentationMode isOpen={presentationOpen} onClose={() => setPresentationOpen(false)} />
     </div>
