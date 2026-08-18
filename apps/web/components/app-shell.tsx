@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { StatusAssinatura, Tarefa, Usuario } from '@crm/shared';
+import type { StatusAssinatura, Tarefa, Usuario, Visita } from '@crm/shared';
 import { useAuth } from './auth-context';
 import { TopThemeSelector } from './top-theme-selector';
 import { FloatingAI } from './floating-ai';
@@ -25,6 +25,17 @@ function iniciaisDe(nome: string): string {
   const partes = nome.trim().split(/\s+/);
   return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? partes[0]?.[1] ?? '')).toUpperCase();
 }
+
+function formatarPrazo(prazoIso: string | null): string {
+  if (!prazoIso) return 'Sem prazo';
+  const dias = Math.floor((new Date(prazoIso).getTime() - Date.now()) / 86_400_000);
+  if (dias < 0) return 'Atrasada';
+  if (dias === 0) return 'Hoje';
+  if (dias === 1) return 'Amanhã';
+  return `Em ${dias} dias`;
+}
+
+const ESTADOS_VISITA_AGENDADA = ['AGENDADA', 'CONFIRMADA'];
 
 const nav = [
   {href:'/',icon:'\uE80F',label:'Dashboard'},
@@ -57,16 +68,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const login=pathname==='/login'||pathname==='/signup'||pathname.startsWith('/portal/');
   const [menuRecolhido,setMenuRecolhido]=useState(false);
   const [menuCabecalho,setMenuCabecalho]=useState<HeaderMenu>(null);
-  const [notificacoesNaoLidas,setNotificacoesNaoLidas]=useState(8);
   const [presentationOpen, setPresentationOpen] = useState(false);
   const [statusAssinatura, setStatusAssinatura] = useState<StatusAssinatura | null>(null);
   const [abrindoCheckout, setAbrindoCheckout] = useState(false);
   const [usuarioAtual, setUsuarioAtual] = useState<Usuario | null>(null);
   const [tarefas, setTarefas] = useState<Tarefa[] | null>(null);
+  const [visitas, setVisitas] = useState<Visita[] | null>(null);
   const headerActionsRef=useRef<HTMLDivElement>(null);
   const tituloPagina=nav.find((item)=>item.href===pathname)?.label ?? 'CIONLARIS';
-  const novoHref=pathname==='/imoveis'?'/imoveis#novo-imovel':pathname==='/oportunidades'?'/oportunidades#nova-negociacao':'/leads#novo-lead';
-  const novoRotulo=pathname==='/imoveis'?'＋ Novo Imóvel':pathname==='/oportunidades'?'＋ Nova Negociação':'＋ Novo Lead';
+  const novoHref=pathname==='/imoveis'?'/imoveis#novo-imovel':pathname==='/oportunidades'?'/oportunidades#nova-negociacao':pathname==='/unidades'?'/unidades#nova-unidade':'/leads#novo-lead';
+  const novoRotulo=pathname==='/imoveis'?'＋ Novo Imóvel':pathname==='/oportunidades'?'＋ Nova Negociação':pathname==='/unidades'?'＋ Nova Unidade':'＋ Novo Lead';
   useEffect(()=>{if(!carregando&&!sessao&&!login)router.replace('/login');},[carregando,sessao,login,router]);
   useEffect(()=>{setMenuCabecalho(null);},[pathname]);
   // @SkipBillingCheck no backend (billing.controller.ts) - funciona mesmo
@@ -75,9 +86,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(()=>{if(!sessao)return;apiFetch<StatusAssinatura>('/billing/status').then(setStatusAssinatura).catch(()=>{});},[sessao?.tenantId]);
   useEffect(()=>{if(!sessao)return;apiFetch<Usuario>('/usuarios/me').then(setUsuarioAtual).catch(()=>{});},[sessao?.tenantId]);
   useEffect(()=>{if(!sessao)return;apiFetch<Tarefa[]>('/tarefas').then(setTarefas).catch(()=>{});},[sessao?.tenantId]);
+  useEffect(()=>{if(!sessao)return;apiFetch<Visita[]>('/visitas').then(setVisitas).catch(()=>{});},[sessao?.tenantId]);
 
-  const tarefasPendentes = tarefas ? tarefas.filter((t)=>!t.concluida).length : null;
+  const tarefasPendentesLista = tarefas ? tarefas.filter((t)=>!t.concluida).sort((a,b)=>{
+    if(!a.prazo&&!b.prazo)return 0; if(!a.prazo)return 1; if(!b.prazo)return -1;
+    return new Date(a.prazo).getTime()-new Date(b.prazo).getTime();
+  }) : null;
+  const tarefasPendentes = tarefasPendentesLista ? tarefasPendentesLista.length : null;
   const percentualTarefasConcluidas = tarefas && tarefas.length>0 ? Math.round((tarefas.filter((t)=>t.concluida).length/tarefas.length)*100) : 0;
+  const proximasVisitas = visitas ? visitas
+    .filter((v)=>ESTADOS_VISITA_AGENDADA.includes(v.estado) && new Date(v.dataHora).getTime()>=Date.now())
+    .sort((a,b)=>new Date(a.dataHora).getTime()-new Date(b.dataHora).getTime())
+    .slice(0,3) : null;
+  const dataHoje = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase();
 
   async function iniciarCheckout(){
     setAbrindoCheckout(true);
@@ -108,19 +129,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Link href="/tarefas" className="goal-card" style={{display:'block',textDecoration:'none',color:'inherit'}}><div><b>Minhas Tarefas</b><span>ⓘ</span></div><div className="goal-body"><div className="goal-ring">{tarefas?`${percentualTarefasConcluidas}%`:'…'}</div><p><strong>{tarefasPendentes??'…'}</strong><small>pendente(s)</small><small>{tarefas?`${percentualTarefasConcluidas}% concluídas`:'Carregando...'}</small></p></div></Link>
       <div className="system-creator-brand"><small>CRM desenvolvido por</small><img src="/cionlaris-logo-transparent.png" alt="CIONLARIS CRM Imobiliário by Concilion"/></div>
     </aside>
-    <div className="app-main"><header className="app-header"><div className="header-page-title"><b>{tituloPagina}</b><small>{pathname==='/'?'Visão geral do negócio':pathname==='/leads'?'Gerencie seus leads e transforme oportunidades em vendas':pathname==='/imoveis'?'Gerencie seu portfólio de imóveis e acompanhe o desempenho de vendas':pathname==='/oportunidades'?'Acompanhe o andamento de todas as negociações':'Gestão imobiliária'}</small></div><div className="search"><span className="fluent">&#xE721;</span><input aria-label="Buscar" placeholder={pathname==='/imoveis'?'Buscar imóveis, leads, proprietários, bairros...':pathname==='/oportunidades'?'Buscar negociações, leads, imóveis ou clientes...':'Buscar leads, clientes, imóveis, oportunidades...'}/><span className="fluent">&#xE11A;</span></div>
+    <div className="app-main"><header className="app-header"><div className="header-page-title"><b>{pathname==='/unidades'?'Unidades da Rede':tituloPagina}</b><small>{pathname==='/'?'Visão geral do negócio':pathname==='/leads'?'Gerencie seus leads e transforme oportunidades em vendas':pathname==='/imoveis'?'Gerencie seu portfólio de imóveis e acompanhe o desempenho de vendas':pathname==='/oportunidades'?'Acompanhe o andamento de todas as negociações':pathname==='/unidades'?'Gerencie filiais, equipes, carteiras e desempenho da operação.':'Gestão imobiliária'}</small></div><div className="search"><span className="fluent">&#xE721;</span><input aria-label="Buscar" placeholder={pathname==='/imoveis'?'Buscar imóveis, leads, proprietários, bairros...':pathname==='/oportunidades'?'Buscar negociações, leads, imóveis ou clientes...':pathname==='/unidades'?'Buscar unidade, cidade ou responsável...':'Buscar leads, clientes, imóveis, oportunidades...'}/><span className="fluent">&#xE11A;</span></div>
       {statusAssinatura?.status==='TRIAL'&&statusAssinatura.diasRestantesTrial!==null&&<Link href="/configuracoes" style={{padding:'6px 12px',borderRadius:20,fontSize:11,color:'var(--muted)',border:'1px solid var(--line)',whiteSpace:'nowrap'}}>Teste grátis: {statusAssinatura.diasRestantesTrial===0?'último dia':`${statusAssinatura.diasRestantesTrial} dia(s)`}</Link>}
       <button type="button" onClick={() => setPresentationOpen(true)} className="new-lead" style={{background: 'linear-gradient(135deg, var(--purple), #5d35be)', border: 'none'}}><span className="fluent">&#xE71C;</span> Apresentação Executiva</button>
       <Link href={novoHref} className="new-lead">{novoRotulo}</Link>
       <TopThemeSelector />
       <div className="header-actions" ref={headerActionsRef}>
-        <button type="button" className={`head-icon fluent${menuCabecalho==='notificacoes'?' head-icon--active':''}`} aria-label="Abrir notificações" aria-haspopup="menu" aria-expanded={menuCabecalho==='notificacoes'} onClick={()=>setMenuCabecalho((atual)=>atual==='notificacoes'?null:'notificacoes')}>&#xEA8F;{notificacoesNaoLidas>0&&<i>{notificacoesNaoLidas}</i>}</button>
+        <button type="button" className={`head-icon fluent${menuCabecalho==='notificacoes'?' head-icon--active':''}`} aria-label="Abrir notificações" aria-haspopup="menu" aria-expanded={menuCabecalho==='notificacoes'} onClick={()=>setMenuCabecalho((atual)=>atual==='notificacoes'?null:'notificacoes')}>&#xEA8F;{!!tarefasPendentes&&tarefasPendentes>0&&<i>{tarefasPendentes}</i>}</button>
         <button type="button" className={`head-icon fluent${menuCabecalho==='agenda'?' head-icon--active':''}`} aria-label="Abrir agenda" aria-haspopup="menu" aria-expanded={menuCabecalho==='agenda'} onClick={()=>setMenuCabecalho((atual)=>atual==='agenda'?null:'agenda')}>&#xE787;</button>
         <button type="button" className={`head-icon fluent${menuCabecalho==='mensagens'?' head-icon--active':''}`} aria-label="Abrir mensagens" aria-haspopup="menu" aria-expanded={menuCabecalho==='mensagens'} onClick={()=>setMenuCabecalho((atual)=>atual==='mensagens'?null:'mensagens')}>&#xE8BD;</button>
         {menuCabecalho&&<section className={`header-popover header-popover--${menuCabecalho}`} role="menu" aria-label={menuCabecalho==='notificacoes'?'Notificações':menuCabecalho==='agenda'?'Agenda':'Mensagens'}>
-          {menuCabecalho==='notificacoes'&&<><header><div><b>Notificações</b><small>{notificacoesNaoLidas} não lidas</small></div><button type="button" onClick={()=>setNotificacoesNaoLidas(0)}>Marcar como lidas</button></header><ul><li><span className="popover-icon popover-icon--purple">✓</span><div><b>Proposta recebida</b><small>Camila Rocha enviou uma contraproposta.</small></div><time>Agora</time></li><li><span className="popover-icon popover-icon--green">▣</span><div><b>Visita confirmada</b><small>Ana Paula confirmou a visita aos Jardins.</small></div><time>10 min</time></li><li><span className="popover-icon popover-icon--blue">♙</span><div><b>Novo lead interessado</b><small>Bruno solicitou informações do imóvel.</small></div><time>25 min</time></li></ul><footer><Link href="/tarefas">Ver todas as notificações</Link></footer></>}
-          {menuCabecalho==='agenda'&&<><header><div><b>Agenda de hoje</b><small>3 compromissos</small></div><span>02 AGO</span></header><ul><li><span className="popover-time">09:30</span><div><b>Apartamento 1201 — Jardins</b><small>Visita com Maria Silva</small></div></li><li><span className="popover-time">11:00</span><div><b>Cobertura Itaim</b><small>Cliente: Carlos Eduardo</small></div></li><li><span className="popover-time">14:30</span><div><b>Casa Alphaville</b><small>Cliente: Fernanda Lima</small></div></li></ul><footer><Link href="/visitas">Abrir agenda completa</Link></footer></>}
-          {menuCabecalho==='mensagens'&&<><header><div><b>Mensagens</b><small>Conversas recentes</small></div><span className="online-dot">Online</span></header><ul><li><span className="message-avatar">MS</span><div><b>Maria Silva</b><small>Enviei os documentos do imóvel.</small></div><time>09:42</time></li><li><span className="message-avatar message-avatar--2">CE</span><div><b>Carlos Eduardo</b><small>Podemos confirmar a visita de amanhã?</small></div><time>09:18</time></li><li><span className="message-avatar message-avatar--3">AP</span><div><b>Ana Paula</b><small>Gostaria de revisar a proposta.</small></div><time>Ontem</time></li></ul><footer><Link href="/leads">Ver todas as conversas</Link></footer></>}
+          {menuCabecalho==='notificacoes'&&<><header><div><b>Tarefas pendentes</b><small>{tarefasPendentes??'…'} no total</small></div></header><ul>{!tarefasPendentesLista?<li style={{color:'var(--muted)',fontSize:11}}>Carregando...</li>:tarefasPendentesLista.length===0?<li style={{color:'var(--muted)',fontSize:11}}>Nenhuma tarefa pendente.</li>:tarefasPendentesLista.slice(0,3).map((t)=><li key={t.id}><span className="popover-icon popover-icon--purple">✓</span><div><b>{t.titulo}</b><small>{formatarPrazo(t.prazo)}</small></div></li>)}</ul><footer><Link href="/tarefas">Ver todas as tarefas</Link></footer></>}
+          {menuCabecalho==='agenda'&&<><header><div><b>Próximas visitas</b><small>{proximasVisitas?`${proximasVisitas.length} agendada(s)`:'Carregando...'}</small></div><span>{dataHoje}</span></header><ul>{!proximasVisitas?<li style={{color:'var(--muted)',fontSize:11}}>Carregando...</li>:proximasVisitas.length===0?<li style={{color:'var(--muted)',fontSize:11}}>Nenhuma visita agendada.</li>:proximasVisitas.map((v)=><li key={v.id}><span className="popover-time">{new Date(v.dataHora).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} {new Date(v.dataHora).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span><div><b>{v.estado==='CONFIRMADA'?'Visita confirmada':'Visita agendada'}</b></div></li>)}</ul><footer><Link href="/visitas">Abrir agenda completa</Link></footer></>}
+          {menuCabecalho==='mensagens'&&<><header><div><b>Mensagens</b><small>Ainda não disponível</small></div></header><p style={{color:'var(--muted)',fontSize:11,padding:'8px 4px'}}>Esse recurso ainda não está disponível nesta versão.</p></>}
         </section>}
       </div>
       <div className="user"><span className="avatar" role="img" aria-label={usuarioAtual?`Foto de ${usuarioAtual.nome}`:'Carregando avatar'}>{usuarioAtual?iniciaisDe(usuarioAtual.nome):'…'}</span><div><b>{usuarioAtual?.nome??'Carregando...'}</b><small>{usuarioAtual?ROTULOS_PERFIL[usuarioAtual.perfil]:''}</small></div><button onClick={()=>{logout();router.replace('/login');}} aria-label="Sair">⌄</button></div></header><div className="app-shell">{children}</div>
