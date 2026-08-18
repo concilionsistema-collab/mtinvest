@@ -127,6 +127,34 @@
 
 @media(max-width:1750px){.contentGrid{grid-template-columns:minmax(0,1fr) 318px;gap:22px}.metric{padding:17px;gap:14px}.metricIcon{flex-basis:76px;width:76px;height:76px;font-size:34px}.metric strong{font-size:27px}.metric b{font-size:15px}.metric small{font-size:11px}.unitCard{padding-inline:17px}.cardIdentity{grid-template-columns:35% 1fr;gap:12px}.cardIdentity h2{font-size:17px}.cardStats>div{padding-inline:6px}.cardStats span{font-size:18px}.owner small{display:none}.pulseCard{padding-inline:18px}.healthRing{flex-basis:164px;width:164px;height:164px}.rankingCard{padding-inline:18px}}
 @media(max-width:1380px){.toolbar{grid-template-columns:minmax(220px,1fr) 170px 210px}.tabs button{min-width:auto;padding-inline:16px}.viewToggle button{min-width:100px}.cardsGrid{gap:12px}.unitCard{height:540px}.cardIdentity{height:125px}.unitPhoto{height:105px}.cardStats{height:78px}.pipeline{height:98px}.owner{height:68px}.cardActions{height:52px}.cardIdentity h2{font-size:15px}.cardIdentity p{font-size:13px}.cardStats small{font-size:8px}.pipeline strong{font-size:17px}.pagination{font-size:11px}}
-@media(max-width:1120px){.contentGrid{grid-template-columns:1fr}.workspace{padding-top:24px}.insights{display:grid;grid-template-columns:1fr 1fr}.metrics{grid-template-columns:repeat(2,1fr)}.cardsGrid{grid-template-columns:repeat(2,1fr)}.pulseCard,.rankingCard{height:auto;min-height:430px}}
-@media(max-width:760px){.toolbar{height:auto;grid-template-columns:1fr 1fr}.searchBox{grid-column:1/-1}.viewBar{height:auto;flex-direction:column}.tabs{min-height:58px;overflow-x:auto}.viewToggle{height:46px}.metrics,.cardsGrid,.insights{grid-template-columns:1fr}.unitCard{height:auto;min-height:540px}.listGrid .unitCard{display:block}.listGrid .unitCard>*{margin-bottom:12px}.pagination{grid-template-columns:1fr auto}.pagination label{display:none}.rankingCard ol{display:block}}
+@media(min-width:761px) and (max-width:1120px){
+  .contentGrid{grid-template-columns:minmax(0,1fr) 190px;gap:16px}
+  .workspace{padding-top:20px}
+  .metrics{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
+  .metric{height:82px;padding:10px 11px;gap:9px;border-radius:10px}
+  .metricIcon{flex-basis:52px;width:52px;height:52px;font-size:24px}
+  .metric strong{font-size:20px}.metric b{margin-top:4px;font-size:11px}.metric small{margin-top:5px;font-size:8px}
+  .toolbar{height:44px;grid-template-columns:minmax(180px,1fr) 108px 134px;gap:8px;margin-bottom:10px}
+  .searchBox,.filterButton,.primaryButton{height:44px;border-radius:8px}
+  .searchBox{padding:0 12px;gap:8px}.searchBox>span{font-size:17px}.searchBox input{font-size:10px}
+  .filterButton{padding:0 10px;font-size:10px}.filterButton span:first-child{font-size:15px}
+  .primaryButton{font-size:10px}.primaryButton span{margin-right:5px;font-size:16px}
+  .viewBar{height:46px;margin-bottom:14px;border-radius:8px}
+  .tabs button{min-width:51px;padding:0 10px;border-bottom-width:3px;font-size:10px}
+  .viewToggle{margin:5px 7px;border-radius:6px}.viewToggle button{min-width:68px;padding:0 8px;font-size:9px}.viewToggle button span{margin-right:4px;font-size:12px}
+  .cardsGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .unitCard{height:390px;padding:12px;border-radius:11px}
+  .cardHeader{height:27px}.typeTag{padding:5px 9px;font-size:8px}.status{gap:4px;font-size:8px}.status i{width:6px;height:6px}.cardHeader>button{width:24px;height:24px;font-size:8px}
+  .cardIdentity{height:96px;grid-template-columns:37% 1fr;gap:9px}.unitPhoto{height:80px;border-radius:6px}
+  .cardIdentity h2{margin-bottom:4px;font-size:12px}.cardIdentity p{margin-bottom:5px;font-size:9px}.cardIdentity small{gap:3px;font-size:8px}.cardIdentity small span{font-size:10px}
+  .cardStats{height:60px}.cardStats>div{column-gap:3px;padding:0 4px}.cardStats span{font-size:13px}.cardStats b{font-size:10px}.cardStats small{font-size:6px}
+  .pipeline{height:72px;padding:11px 0 9px}.pipeline small{font-size:8px}.pipeline strong{margin-top:3px;font-size:13px}.pipeline>span{margin-top:-20px;font-size:9px}.pipeline>i{height:6px;margin-top:9px}
+  .owner{height:48px;gap:5px}.ownerAvatar{flex-basis:27px;width:27px;height:27px;font-size:7px}.owner time{font-size:6px}.owner time i{width:5px;height:5px}
+  .cardActions{height:40px;gap:7px}.cardActions button,.cardActions a{gap:5px;border-radius:6px;font-size:8px}.cardActions a b{margin-right:7px;font-size:15px}
+  .pagination{height:52px;margin-top:10px;padding-top:8px;font-size:8px}.pagination button{width:29px;height:29px;font-size:12px}.pagination .currentPage{font-size:9px}.pagination select{height:29px;margin-left:5px;padding:0 20px 0 8px;font-size:8px}
+  .insights{display:flex;gap:10px}.pulseCard{height:340px;padding:16px 13px}.pulseCard h2,.rankingCard h2{font-size:13px}.pulseVisual{height:155px;gap:7px}.healthRing{flex-basis:105px;width:105px;height:105px;box-shadow:0 0 0 7px rgba(50,184,81,.06)}.healthRing strong{font-size:22px}.healthRing small{margin-top:4px;font-size:8px}
+  .sparkline{width:45px;height:55px;transform:scale(.66);transform-origin:left center}.pulseCard p{margin-bottom:12px;font-size:9px}.pulseCard p strong{font-size:13px}.pulseCard p span{margin-left:35px}.pulseCard>button,.rankingCard>button{height:36px;border-radius:6px;font-size:9px}
+  .rankingCard{height:350px;padding:15px 12px}.rankingCard ol{margin:10px 0}.rankingCard li{min-height:60px;grid-template-columns:10px 32px 1fr auto;gap:5px}.rank{font-size:8px}.rankPhoto{width:32px;height:32px;border-radius:5px}.rankCopy>b{font-size:8px}.rankCopy small{margin-top:2px;font-size:6px}.rankCopy i{height:4px;margin-top:6px}.rankingCard li>strong{padding:4px;font-size:7px}
+}
+@media(max-width:760px){.contentGrid{grid-template-columns:1fr}.workspace{padding-top:18px}.toolbar{height:auto;grid-template-columns:1fr 1fr}.searchBox{grid-column:1/-1}.viewBar{height:auto;flex-direction:column}.tabs{min-height:58px;overflow-x:auto}.viewToggle{height:46px}.metrics,.cardsGrid,.insights{grid-template-columns:1fr}.unitCard{height:auto;min-height:540px}.listGrid .unitCard{display:block}.listGrid .unitCard>*{margin-bottom:12px}.pagination{grid-template-columns:1fr auto}.pagination label{display:none}.rankingCard ol{display:block}}
 @media(max-width:500px){.workspace{padding-top:14px}.toolbar{grid-template-columns:1fr}.searchBox{grid-column:auto}.metric{height:112px}.viewToggle button{min-width:50%}.owner time{display:none}.pagination>span{max-width:190px}.pulseCard,.rankingCard{margin-top:12px}}
