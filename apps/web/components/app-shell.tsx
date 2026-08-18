@@ -121,6 +121,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       : <button type="button" onClick={iniciarCheckout} disabled={abrindoCheckout} className="new-lead" style={{border:'none'}}>{abrindoCheckout?'Abrindo...':'Assinar agora'}</button>}
     <button type="button" onClick={()=>{logout();router.replace('/login');}} style={{background:'none',border:0,color:'var(--muted)',textDecoration:'underline',cursor:'pointer'}}>Sair</button>
   </div>;
+  if(pathname==='/unidades')return <div className="units-route-frame">
+    <header className="units-route-header">
+      <div className="units-route-heading"><span className="units-route-heading__icon fluent" aria-hidden="true">&#xE716;</span><div><h1>Unidades da Rede</h1><p>Gerencie filiais, equipes, carteiras e desempenho da operação.</p></div></div>
+      <div className="units-route-actions" ref={headerActionsRef}>
+        <button type="button" className="units-route-icon fluent" aria-label="Buscar unidades" onClick={()=>document.getElementById('unit-search')?.focus()}>&#xE721;</button>
+        <button type="button" className="units-route-icon units-route-bell fluent" aria-label="Abrir notificações" aria-expanded={menuCabecalho==='notificacoes'} onClick={()=>setMenuCabecalho((atual)=>atual==='notificacoes'?null:'notificacoes')}>&#xEA8F;<i>3</i></button>
+        {menuCabecalho==='notificacoes'&&<section className="units-route-popover" role="menu"><b>Notificações</b><small>3 atualizações da rede</small><Link href="/tarefas">Ver todas</Link></section>}
+        <div className="units-route-user"><span className="units-route-avatar" role="img" aria-label={usuarioAtual?`Foto de ${usuarioAtual.nome}`:'Perfil do usuário'}>{usuarioAtual?iniciaisDe(usuarioAtual.nome):'RC'}<i/></span><div><b>{usuarioAtual?.nome??'Rafael Costa'}</b><small>Administrador</small></div><button type="button" onClick={()=>{logout();router.replace('/login');}} aria-label="Sair">⌄</button></div>
+      </div>
+    </header>
+    <div className="units-route-shell">{children}</div>
+  </div>;
   return <div className={`app-frame premium-app-frame${menuRecolhido?' app-frame--collapsed':''}`}>
     <aside className="app-sidebar premium-sidebar">
       <div className="brand tenant-brand"><div className="tenant-brand__identity"><img src="/mt-invest-shield.png" alt="Escudo MT INVEST"/><img src="/mt-invest-wordmark.png" alt="MT INVEST"/></div><button type="button" onClick={()=>setMenuRecolhido((atual)=>!atual)} aria-label={menuRecolhido?'Expandir menu':'Recolher menu'} aria-expanded={!menuRecolhido}>☰</button></div>

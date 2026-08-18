@@ -37,17 +37,16 @@ export default function UnidadesPage() {
   if(!sessao)return null;
 
   return <main className={styles.page}>
+    <div className={styles.contentGrid}>
+      <section className={styles.workspace}>
     <section className={styles.metrics} aria-label="Resumo da rede">
       <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.blue}`}><span className="fluent">&#xE716;</span></span><div><strong>{String(unidades.length).padStart(2,'0')}</strong><b>Unidades</b><small>{String(totalAtivas).padStart(2,'0')} ativas</small></div></article>
       <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.green}`}><span className="fluent">&#xE821;</span></span><div><strong>{totalImoveis}</strong><b>Imóveis</b><small>+12 este mês</small></div></article>
       <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.purple}`}><span className="fluent">&#xE716;</span></span><div><strong>{totalLeads}</strong><b>Leads ativos</b><small>34 novos hoje</small></div></article>
       <article className={styles.metric}><span className={`${styles.metricIcon} ${styles.gold}`}><span className="fluent">&#xE9D2;</span></span><div><strong>{pipelineTotal>=1000000?`R$ ${(pipelineTotal/1000000).toFixed(1).replace('.',',')} mi`:moeda(pipelineTotal)}</strong><b>Em negociações</b><small>Pipeline total</small></div></article>
     </section>
-
-    <div className={styles.contentGrid}>
-      <section className={styles.workspace}>
         <div className={styles.toolbar}>
-          <label className={styles.searchBox}><span className="fluent">&#xE721;</span><input value={busca} onChange={(evento)=>setBusca(evento.target.value)} placeholder="Buscar unidade, cidade ou responsável..."/>{busca&&<button type="button" onClick={()=>setBusca('')} aria-label="Limpar busca">×</button>}</label>
+          <label className={styles.searchBox}><span className="fluent">&#xE721;</span><input id="unit-search" value={busca} onChange={(evento)=>setBusca(evento.target.value)} placeholder="Buscar unidade, cidade ou responsável..."/>{busca&&<button type="button" onClick={()=>setBusca('')} aria-label="Limpar busca">×</button>}</label>
           <div className={styles.filterWrap}><button type="button" className={styles.filterButton} onClick={()=>setFiltroAberto((aberto)=>!aberto)} aria-expanded={filtroAberto}><span className="fluent">&#xE71C;</span> Filtros <span>⌄</span></button>{filtroAberto&&<div className={styles.filterMenu}><b>Filtrar unidades</b><button type="button" onClick={()=>{setAba('ativas');setFiltroAberto(false);}}>Somente ativas</button><button type="button" onClick={()=>{setAba('filiais');setFiltroAberto(false);}}>Somente filiais</button><button type="button" onClick={()=>{setAba('todas');setBusca('');setFiltroAberto(false);}}>Limpar filtros</button></div>}</div>
           <button type="button" className={styles.primaryButton} onClick={()=>setModalAberto(true)}><span>＋</span> Nova unidade</button>
         </div>
