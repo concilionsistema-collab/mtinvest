@@ -7,7 +7,7 @@ import { useAuth } from '../../components/auth-context';
 import { apiFetch, ApiError } from '../../lib/api';
 import styles from './propostas.module.css';
 
-type Filtro = 'todas' | 'enviadas' | 'negociacao' | 'contrapropostas' | 'aceitas' | 'recusadas';
+type Filtro = 'todas' | 'enviadas' | 'negociacao' | 'contrapropostas' | 'aceitas' | 'recusadas' | 'expiradas';
 type Visualizacao = 'lista' | 'kanban' | 'timeline';
 type Tom = 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
 
@@ -21,6 +21,7 @@ const FILTROS: { id: Filtro; rotulo: string }[] = [
   { id: 'todas', rotulo: 'Todas' }, { id: 'enviadas', rotulo: 'Enviadas' },
   { id: 'negociacao', rotulo: 'Em negociação' }, { id: 'contrapropostas', rotulo: 'Contrapropostas' },
   { id: 'aceitas', rotulo: 'Aceitas' }, { id: 'recusadas', rotulo: 'Recusadas' },
+  { id: 'expiradas', rotulo: 'Expiradas' },
 ];
 
 const STATUS: Record<Proposta['status'], string> = { ENVIADA: 'Enviada', ACEITA: 'Aceita', RECUSADA: 'Recusada' };
@@ -66,7 +67,6 @@ export default function PropostasPage() {
   const [visualizacao, setVisualizacao] = useState<Visualizacao>('lista');
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
-  const [processando, setProcessando] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessao) return;
@@ -112,7 +112,8 @@ export default function PropostasPage() {
     if (filtro === 'negociacao') return p.status === 'ENVIADA' && p.tipo === 'CONTRAPROPOSTA';
     if (filtro === 'contrapropostas') return grupo.propostas.some((item) => item.tipo === 'CONTRAPROPOSTA');
     if (filtro === 'aceitas') return p.status === 'ACEITA';
-    return p.status === 'RECUSADA';
+    if (filtro === 'recusadas') return p.status === 'RECUSADA';
+    return false;
   });
 
   const valorTotal = grupos.reduce((soma, grupo) => soma + grupo.atual.valor, 0);
@@ -126,16 +127,6 @@ export default function PropostasPage() {
   const conversao = grupos.length ? Math.round(aceitas.length / grupos.length * 1000) / 10 : 0;
   const semResposta = negociacao.filter((g) => Date.now() - new Date(g.atual.criadoEm).getTime() > 48 * 60 * 60 * 1000);
   const descontoAlto = grupos.filter((g) => { const c = contexto(g); return c.imovel?.valorAnunciado && g.atual.valor < c.imovel.valorAnunciado * .82; });
-
-  async function aceitar(id: string) {
-    setProcessando(id); setMensagem(null);
-    try {
-      const atualizada = await apiFetch<Proposta>(`/propostas/${id}/aceitar`, { method: 'POST' });
-      setPropostas((lista) => lista?.map((p) => p.id === id ? atualizada : p) ?? null);
-      setMensagem('Proposta aceita com sucesso.');
-    } catch { setMensagem('Apenas o responsável pela negociação pode aceitar esta proposta.'); }
-    finally { setProcessando(null); }
-  }
 
   if (!sessao) return null;
   if (erro) return <main className={styles.state}><Icon code="" /><h1>Propostas indisponíveis</h1><p>{erro}</p></main>;
@@ -151,11 +142,10 @@ export default function PropostasPage() {
 
   return <main className={styles.page}>
     {mensagem && <button type="button" className={styles.toast} onClick={() => setMensagem(null)}>{mensagem}<span>×</span></button>}
-    <section className={styles.metrics} aria-label="Resumo das propostas">{metricas.map((m) => <article className={styles.metric} data-tone={m.tom} key={m.titulo}><span><Icon code={m.icone} /></span><div><strong>{m.valor}</strong><b>{m.titulo}</b><small>{m.apoio}</small></div></article>)}</section>
-
     <section className={styles.workspace}>
       <div className={styles.mainColumn}>
-        <div className={styles.toolbar}>
+        <section className={styles.metrics} aria-label="Resumo das propostas">{metricas.map((m) => <article className={styles.metric} data-tone={m.tom} key={m.titulo}><span><Icon code={m.icone} /></span><div><strong>{m.valor}</strong><b>{m.titulo}</b><small>{m.apoio}</small></div></article>)}</section>
+        <div className={styles.toolbar} id="propostas-filtros">
           <div className={styles.filters} role="tablist" aria-label="Filtrar propostas">{FILTROS.map((item) => <button type="button" role="tab" aria-selected={filtro === item.id} className={filtro === item.id ? styles.active : ''} onClick={() => setFiltro(item.id)} key={item.id}>{item.rotulo}</button>)}</div>
           <div className={styles.views}>{(['lista', 'kanban', 'timeline'] as Visualizacao[]).map((item) => <button type="button" className={visualizacao === item ? styles.activeView : ''} onClick={() => setVisualizacao(item)} key={item}><Icon code={item === 'lista' ? '' : item === 'kanban' ? '' : ''} />{item[0].toUpperCase() + item.slice(1)}</button>)}</div>
         </div>
@@ -170,11 +160,11 @@ export default function PropostasPage() {
           const contra = [...grupo.propostas].reverse().find((item) => item.tipo === 'CONTRAPROPOSTA');
           return <article className={styles.proposalCard} data-tone={tom} key={grupo.oportunidadeId}>
             <div className={`${styles.photo} ${styles[`photo${index % 3 + 1}`]}`} role="img" aria-label={`Imagem de ${tituloImovel(endereco)}`} />
-            <div className={styles.identity}><span className={styles.code}>#PR-{p.id.slice(-5).toUpperCase()}</span><h2>{tituloImovel(endereco)}</h2><p>{endereco}</p><div className={styles.people}><span><Icon code="" /><small>Cliente</small><b>{c.cliente?.nome ?? 'Cliente não identificado'}</b></span><span><Icon code="" /><small>Corretor</small><b>{c.corretor?.nome ?? 'Equipe comercial'}</b></span></div><div className={styles.actions}>{p.status === 'ENVIADA' && <button type="button" className={styles.primaryAction} disabled={processando === p.id} onClick={() => aceitar(p.id)}><Icon code="" />{processando === p.id ? 'Processando...' : 'Aceitar proposta'}</button>}<Link href="/oportunidades"><Icon code="" />Abrir negociação</Link><Link href="/pessoas"><Icon code="" />Ver cliente</Link><Link href="/imoveis"><Icon code="" />Ver imóvel</Link></div></div>
+            <div className={styles.identity}><span className={styles.code}>#PR-{p.id.slice(-5).toUpperCase()}</span><h2>{tituloImovel(endereco)}</h2><p>{endereco}</p><div className={styles.people}><span><Icon code="" /><small>Cliente</small><b>{c.cliente?.nome ?? 'Cliente não identificado'}</b></span><span><Icon code="" /><small>Corretor</small><b>{c.corretor?.nome ?? 'Equipe comercial'}</b></span></div><div className={styles.actions}>{p.status === 'ACEITA' ? <Link className={styles.contractAction} href="/contratos"><Icon code="" />Gerar contrato</Link> : p.tipo === 'CONTRAPROPOSTA' ? <Link className={styles.primaryAction} href="/oportunidades"><Icon code="" />Abrir negociação</Link> : <button type="button" className={styles.reminderAction} onClick={() => setMensagem('Lembrete preparado para envio ao cliente.')}><Icon code="" />Enviar lembrete</button>}<Link href="/pessoas"><Icon code="" />Ver cliente</Link><Link href="/imoveis"><Icon code="" />Ver imóvel</Link><button type="button" aria-label="Mais opções">•••</button></div></div>
             <div className={styles.financial}><dl><div><dt>Preço do imóvel</dt><dd>{moeda(preco)}</dd></div><div><dt>Proposta atual</dt><dd className={styles.blue}>{moeda(p.valor)}</dd></div><div><dt>Contraproposta</dt><dd className={styles.orange}>{contra && contra.id !== p.id ? moeda(contra.valor) : '—'}</dd></div></dl><div className={styles.difference}><span>Diferença</span><strong data-positive={diferenca >= 0}>{diferenca >= 0 ? '↕ ' : ''}{moeda(Math.abs(diferenca))} ({percentual.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)</strong></div><small className={styles.conditions}>{p.condicoes}</small></div>
-            <aside className={styles.stage}><span className={styles.status}>{rotuloDaProposta(p)}</span><div><span>Probabilidade</span><b>{probabilidade(p)}%</b></div><i><b style={{ width: `${probabilidade(p)}%` }} /></i><dl><div><dt>Última interação</dt><dd>{tempoDesde(p.criadoEm)}</dd></div><div><dt>Etapa atual</dt><dd>{p.status === 'ACEITA' ? 'Aguardando contrato' : p.tipo === 'CONTRAPROPOSTA' ? 'Negociação de valor' : 'Aguardando retorno'}</dd></div></dl></aside>
+            <aside className={styles.stage}><button type="button" className={styles.favorite} aria-label="Favoritar proposta">☆</button><span className={styles.status}>{rotuloDaProposta(p)}</span><div><span>Probabilidade</span><b>{probabilidade(p)}%</b></div><i><b style={{ width: `${probabilidade(p)}%` }} /></i><dl><div><dt>Última interação</dt><dd>{tempoDesde(p.criadoEm)}</dd></div><div><dt>Etapa atual</dt><dd>{p.status === 'ACEITA' ? 'Aguardando contrato' : p.tipo === 'CONTRAPROPOSTA' ? 'Negociação de valor' : 'Aguardando retorno'}</dd></div></dl></aside>
           </article>;
-        })}</div>}
+        })}<footer className={styles.pagination}><span>Mostrando 1 a {Math.min(filtrados.length, 10)} de {filtrados.length} propostas</span><nav aria-label="Paginação"><button type="button">‹</button><button type="button" className={styles.currentPage}>1</button><button type="button">2</button><button type="button">3</button><button type="button">4</button><button type="button">5</button><button type="button">›</button></nav><label>Itens por página: <select defaultValue="10"><option>10</option><option>20</option><option>50</option></select></label></footer></div>}
 
         {visualizacao === 'kanban' && <div className={styles.kanban}>{[
           ['Enviadas', filtrados.filter((g) => g.atual.status === 'ENVIADA' && g.atual.tipo === 'INICIAL')],
