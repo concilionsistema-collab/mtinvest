@@ -21,6 +21,7 @@ import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 import { CarteirasModule } from './modules/carteiras/carteiras.module';
 import { TarefasModule } from './modules/tarefas/tarefas.module';
 import { LocacaoModule } from './modules/locacao/locacao.module';
+import { FinanceiroModule } from './modules/financeiro/financeiro.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { HealthModule } from './modules/health/health.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
@@ -68,6 +69,7 @@ import { BillingModule } from './modules/billing/billing.module';
     CarteirasModule,
     TarefasModule,
     LocacaoModule,
+    FinanceiroModule,
     SchedulerModule,
     HealthModule,
   ],

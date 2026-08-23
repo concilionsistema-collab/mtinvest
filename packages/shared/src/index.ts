@@ -17,3 +17,4 @@ export * from './auditoria';
 export * from './carteira';
 export * from './tarefa';
 export * from './locacao';
+export * from './financeiro';

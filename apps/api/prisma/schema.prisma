@@ -78,6 +78,7 @@ model Unidade {
   usuarios                   Usuario[]
   leads                      Lead[]
   contratosDeAdministracao   ContratoDeAdministracao[]
+  lancamentosFinanceiros     LancamentoFinanceiro[]
 
   @@map("unidade")
 }
@@ -195,6 +196,7 @@ model Pessoa {
   contratosDeLocacaoComoInquilino          ContratoDeLocacao[]
   garantiasComoFiador                      Garantia[]
   acessosPortal                            AcessoPortalContrato[]
+  lancamentosFinanceiros                   LancamentoFinanceiro[]
 
   @@unique([tenantId, documentoNormalizado])
   @@unique([tenantId, telefoneNormalizado])
@@ -498,6 +500,7 @@ model Oportunidade {
   reservas            Reserva[]
   itensChecklist      ChecklistDocumentoItem[]
   comissoesCruzadas   ComissaoCruzadaAcionada[]
+  lancamentosFinanceiros LancamentoFinanceiro[]
 
   @@index([tenantId])
   @@index([tenantId, estado])
@@ -801,6 +804,7 @@ model ContratoDeLocacao {
   documentos              DocumentoDeContrato[]
   acessosPortal           AcessoPortalContrato[]
   encerramentosAntecipados EncerramentoAntecipado[]
+  lancamentosFinanceiros  LancamentoFinanceiro[]
 
   @@index([tenantId])
   @@index([tenantId, contratoDeAdministracaoId])
@@ -1101,4 +1105,87 @@ model Garantia {
   @@index([tenantId])
   @@index([tenantId, contratoDeLocacaoId])
   @@map("garantia")
+}
+
+// ============================================================
+// Motor financeiro manual (livro-razao) - DEC-ARQ-006. Ver
+// relatorio de diagnostico 2026-08-23: ate aqui o sistema
+// calculava VGV/comissao cruzada mas nunca gerava um lancamento
+// de dinheiro de fato - nenhuma tabela de pagamento existia.
+// Esta fatia cobre lancamento MANUAL apenas (sem geracao
+// automatica a partir de Oportunidade/ContratoDeLocacao, que
+// depende de DEC-NEG-002/004 ainda pendentes, e sem integracao
+// bancaria/CNAB, que depende de DEC-TEC-003 ainda pendente).
+// ============================================================
+
+enum LancamentoFinanceiroTipo {
+  A_PAGAR
+  A_RECEBER
+}
+
+enum LancamentoFinanceiroCategoria {
+  COMISSAO
+  ALUGUEL
+  REPASSE_PROPRIETARIO
+  TAXA_ADMINISTRACAO
+  DESPESA_OPERACIONAL
+  OUTRO
+}
+
+enum LancamentoFinanceiroStatus {
+  PENDENTE
+  LIQUIDADO
+  CANCELADO
+}
+
+// Tenant-scoped: Sim. RN-011 (mesmo criterio de IndicadoresService): Gestor
+// de unidade so ve/edita a propria unidade - nao ha perfil de rede/matriz
+// nesta fatia, entao unidadeId e obrigatorio e sempre extraido do ator
+// autenticado (nunca aceito do cliente). "Atrasado" nunca e armazenado -
+// sempre derivado em leitura (status=PENDENTE e vencimento no passado),
+// mesmo espirito de nao guardar estado que pode ser calculado. Sem update
+// generico/atualizadoEm (nao e padrao deste schema) - transicoes de estado
+// tem par timestamp+ator proprio (liquidadoPorUsuarioId/dataLiquidacao,
+// canceladoPorUsuarioId/canceladoEm), mesmo padrao de Renovacao/
+// EncerramentoAntecipado. Sem hard delete - so cancelamento (mesmo espirito
+// append-only usado em Proposta/Reserva/Garantia).
+model LancamentoFinanceiro {
+  id        String                         @id @default(uuid())
+  tenantId  String                         @map("tenant_id")
+  unidadeId String                         @map("unidade_id")
+  tipo      LancamentoFinanceiroTipo
+  categoria LancamentoFinanceiroCategoria
+  descricao String
+  valor     Decimal                        @db.Decimal(12, 2)
+  vencimento DateTime                      @db.Date
+  status    LancamentoFinanceiroStatus     @default(PENDENTE)
+
+  dataLiquidacao         DateTime? @map("data_liquidacao")
+  liquidadoPorUsuarioId  String?   @map("liquidado_por_usuario_id")
+
+  canceladoEm            DateTime? @map("cancelado_em")
+  canceladoPorUsuarioId  String?   @map("cancelado_por_usuario_id")
+  motivoCancelamento     String?   @map("motivo_cancelamento")
+
+  // Titularidade formal (DEC-NEG) nao esta definida nesta fatia - contraparte
+  // e texto livre; pessoaId so e preenchido quando ja existe cadastro Pessoa.
+  contraparte           String?
+  pessoaId              String?   @map("pessoa_id")
+  oportunidadeId        String?   @map("oportunidade_id")
+  contratoDeLocacaoId   String?   @map("contrato_de_locacao_id")
+  observacoes           String?
+
+  criadoPorUsuarioId String   @map("criado_por_usuario_id")
+  criadoEm           DateTime @default(now()) @map("criado_em")
+
+  unidade           Unidade            @relation(fields: [unidadeId], references: [id])
+  pessoa            Pessoa?            @relation(fields: [pessoaId], references: [id])
+  oportunidade      Oportunidade?      @relation(fields: [oportunidadeId], references: [id])
+  contratoDeLocacao ContratoDeLocacao? @relation(fields: [contratoDeLocacaoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, unidadeId])
+  @@index([tenantId, unidadeId, status])
+  @@index([tenantId, unidadeId, tipo, status])
+  @@map("lancamento_financeiro")
 }
