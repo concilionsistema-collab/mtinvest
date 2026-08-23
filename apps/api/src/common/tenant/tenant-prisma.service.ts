@@ -22,10 +22,23 @@ type TenantScopedClient = Omit<
 export class TenantPrismaService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // maxWait/timeout explicitos: o default do Prisma (maxWait 2s, timeout 5s)
+  // e pensado pra um pool de conexao generoso - sob o pool_size=15 (limite
+  // do plano atual do Supabase) e varias invocacoes serverless concorrentes
+  // disputando conexao ao mesmo tempo (ex.: uma tela que dispara varias
+  // chamadas em paralelo, como /equipe), 2s pra CONSEGUIR uma conexao e
+  // curto demais e estoura com "Unable to start a transaction in the given
+  // time" mesmo quando a consulta em si e trivial - o gargalo e esperar a
+  // conexao vagar, nao a query rodar. maxWait maior da mais fila pra
+  // esperar sem falhar; timeout maior e so headroom de seguranca (as
+  // consultas reais daqui sao rapidas - dado pequeno, sem query pesada).
   async run<T>(tenantId: string, work: (tx: TenantScopedClient) => Promise<T>): Promise<T> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw(Prisma.sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`);
-      return work(tx);
-    });
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw(Prisma.sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`);
+        return work(tx);
+      },
+      { maxWait: 15_000, timeout: 15_000 },
+    );
   }
 }
