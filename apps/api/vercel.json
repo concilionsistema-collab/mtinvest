@@ -9,6 +9,7 @@
       "maxDuration": 60
     }
   },
+  "regions": ["gru1"],
   "rewrites": [
     { "source": "/(.*)", "destination": "/api" }
   ],
