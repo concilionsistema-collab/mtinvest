@@ -87,10 +87,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   // @SkipBillingCheck no backend (billing.controller.ts) - funciona mesmo
   // com a assinatura ja vencida, senao o bloqueio abaixo nunca conseguiria
   // se autoconsultar.
+  // Escalonado de proposito (nao dispara os 4 juntos): cada navegacao nova
+  // ja soma a chamada critica da propria pagina a estas 4 do cabecalho, e o
+  // pool do Session pooler do Supabase (free tier) tem teto de 15 conexoes
+  // simultaneas - disparar tudo no mesmo tick faz cada requisicao (mesmo uma
+  // trivial, ex.: SELECT 1) esperar fila de conexao e a pagina parecer
+  // travada (ex.: "/unidades" demorando "um tempao"). billing/status fica
+  // imediato por ser o unico que bloqueia acesso (assinaturaBloqueada);
+  // os demais sao so decoracao do cabecalho, atraso nao afeta UX percebida.
   useEffect(()=>{if(!sessao)return;apiFetch<StatusAssinatura>('/billing/status').then(setStatusAssinatura).catch(()=>{});},[sessao?.tenantId]);
-  useEffect(()=>{if(!sessao)return;apiFetch<Usuario>('/usuarios/me').then(setUsuarioAtual).catch(()=>{});},[sessao?.tenantId]);
-  useEffect(()=>{if(!sessao)return;apiFetch<Tarefa[]>('/tarefas').then(setTarefas).catch(()=>{});},[sessao?.tenantId]);
-  useEffect(()=>{if(!sessao)return;apiFetch<Visita[]>('/visitas').then(setVisitas).catch(()=>{});},[sessao?.tenantId]);
+  useEffect(()=>{if(!sessao)return;const t=window.setTimeout(()=>{apiFetch<Usuario>('/usuarios/me').then(setUsuarioAtual).catch(()=>{});},250);return()=>window.clearTimeout(t);},[sessao?.tenantId]);
+  useEffect(()=>{if(!sessao)return;const t=window.setTimeout(()=>{apiFetch<Tarefa[]>('/tarefas').then(setTarefas).catch(()=>{});},500);return()=>window.clearTimeout(t);},[sessao?.tenantId]);
+  useEffect(()=>{if(!sessao)return;const t=window.setTimeout(()=>{apiFetch<Visita[]>('/visitas').then(setVisitas).catch(()=>{});},750);return()=>window.clearTimeout(t);},[sessao?.tenantId]);
 
   const tarefasPendentesLista = tarefas ? tarefas.filter((t)=>!t.concluida).sort((a,b)=>{
     if(!a.prazo&&!b.prazo)return 0; if(!a.prazo)return 1; if(!b.prazo)return -1;
