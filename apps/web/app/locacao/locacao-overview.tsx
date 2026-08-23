@@ -14,6 +14,7 @@ type Props = {
   vistorias: Record<string, Vistoria[]>;
   reajustes: Record<string, Reajuste[]>;
   documentos: Record<string, DocumentoDeContrato[]>;
+  lancamentos: { id: string; contratoDeLocacaoId: string | null; tipo: 'A_PAGAR' | 'A_RECEBER'; categoria: string; descricao: string; valor: number; vencimento: string; status: 'PENDENTE' | 'LIQUIDADO' | 'CANCELADO'; dataLiquidacao: string | null }[];
 };
 
 const ESTADOS: Record<ContratoDeLocacao['estado'], string> = { RASCUNHO: 'Rascunho', EM_ASSINATURA: 'Em assinatura', AGUARDANDO_VISTORIA_ENTRADA: 'Aguardando vistoria', VIGENTE: 'Vigente', EM_ENCERRAMENTO: 'Em encerramento', EM_ENCERRAMENTO_ANTECIPADO: 'Encerramento antecipado', ENCERRADO: 'Encerrado' };
@@ -27,9 +28,9 @@ function codigo(contrato: ContratoDeLocacao) { return `CA-${new Date(contrato.cr
 function abrirGestao() { const detalhe = document.getElementById('gestao-tecnica-locacao') as HTMLDetailsElement | null; if (detalhe) { detalhe.open = true; detalhe.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }
 function iniciais(nome: string) { return nome.split(/\s+/).filter(Boolean).map((parte) => parte[0]).slice(0, 2).join('').toLocaleUpperCase('pt-BR'); }
 
-export function LocacaoOverview({ locacoes, administracoes, imoveis, pessoas, garantias, vistorias, reajustes, documentos }: Props) {
+export function LocacaoOverview({ locacoes, administracoes, imoveis, pessoas, garantias, vistorias, reajustes, documentos, lancamentos }: Props) {
   const [contratoId, setContratoId] = useState(locacoes.find((l) => l.estado === 'VIGENTE')?.id ?? locacoes[0]?.id ?? '');
-  const [aba, setAba] = useState<'geral' | 'partes'>('geral');
+  const [aba, setAba] = useState<'geral' | 'partes' | 'financeiro'>('geral');
   const contrato = locacoes.find((l) => l.id === contratoId) ?? locacoes[0];
   const contexto = useMemo(() => {
     if (!contrato) return null;
@@ -47,6 +48,13 @@ export function LocacaoOverview({ locacoes, administracoes, imoveis, pessoas, ga
   const finalidade = contexto.imovel?.finalidade === 'LOCACAO' ? 'Locação' : contexto.imovel?.finalidade === 'AMBOS' ? 'Venda e locação' : 'Residencial';
   const garantiaNome = contexto.garantia ? contexto.garantia.tipo === 'FIADOR' ? 'Fiador' : contexto.garantia.tipo === 'CAUCAO' ? 'Caução' : 'Seguro-fiança' : contrato.exigeGarantia ? 'Pendente' : 'Não exigida';
   const diasRestantes = Math.ceil((fim - agora) / 86_400_000);
+  const lancamentosContrato = lancamentos.filter((item) => item.contratoDeLocacaoId === contrato.id && item.status !== 'CANCELADO').sort((a, b) => new Date(b.vencimento).getTime() - new Date(a.vencimento).getTime());
+  const recebidos = lancamentosContrato.filter((item) => item.tipo === 'A_RECEBER' && item.status === 'LIQUIDADO').reduce((soma, item) => soma + item.valor, 0);
+  const emAberto = lancamentosContrato.filter((item) => item.tipo === 'A_RECEBER' && item.status === 'PENDENTE').reduce((soma, item) => soma + item.valor, 0);
+  const totalLancado = lancamentosContrato.filter((item) => item.tipo === 'A_RECEBER').reduce((soma, item) => soma + item.valor, 0);
+  const totalContrato = contrato.valorAluguel * contrato.prazoMeses;
+  const proximoVencimento = [...lancamentosContrato].filter((item) => item.status === 'PENDENTE' && item.tipo === 'A_RECEBER').sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime())[0];
+  const ultimoReajuste = contexto.listaReajustes.at(-1);
 
   return <section className={styles.overview}>
     <div className={styles.contractHero}>
@@ -56,7 +64,7 @@ export function LocacaoOverview({ locacoes, administracoes, imoveis, pessoas, ga
 
     <nav className={styles.contractTabs} aria-label="Seções do contrato">{[
       ['geral', 'Visão geral'], ['partes', 'Partes'], ['financeiro', 'Financeiro'], ['garantias', 'Garantias'], ['documentos', 'Documentos'], ['portais', 'Portais'], ['historico', 'Histórico'], ['observacoes', 'Observações'],
-    ].map(([id, item]) => <button type="button" className={aba === id ? styles.tabActive : ''} onClick={() => id === 'geral' || id === 'partes' ? setAba(id) : abrirGestao()} key={id}>{id === 'documentos' && <Icon code={'\uE8A5'} />}{item}</button>)}</nav>
+    ].map(([id, item]) => <button type="button" className={aba === id ? styles.tabActive : ''} onClick={() => id === 'geral' || id === 'partes' || id === 'financeiro' ? setAba(id) : abrirGestao()} key={id}>{id === 'documentos' && <Icon code={'\uE8A5'} />}{item}</button>)}</nav>
 
     <div className={styles.overviewGrid}>
       <div className={styles.overviewMain}>
@@ -68,22 +76,42 @@ export function LocacaoOverview({ locacoes, administracoes, imoveis, pessoas, ga
           <span><Icon code={'\uE7EE'} /><small>Finalidade</small><b>{finalidade}</b></span><span><Icon code={'\uE787'} /><small>Vencimento</small><b>{data(contrato.vencimentoAtual)}</b></span><span><Icon code={'\uE8D7'} /><small>Reajustes aplicados</small><b>{contexto.listaReajustes.length}</b></span><span><Icon code={'\uE73E'} /><small>Documentos</small><b>{contexto.listaDocumentos.length} cadastrado(s)</b></span>
           <span><Icon code={'\uE916'} /><small>Prazo</small><b>{contrato.prazoMeses} meses</b></span><span><Icon code={'\uE7BA'} /><small>Renovação automática</small><b>Não — exige confirmação</b></span><span><Icon code={'\uE8D4'} /><small>Índice de reajuste</small><b>{INDICES[contrato.indiceReajuste]}</b></span><span><Icon code={'\uE9D2'} /><small>Dia do vencimento</small><b>Todo dia {contrato.diaVencimento}</b></span>
           </div></article>
-        </> : <article className={`${styles.card} ${styles.partiesCard}`}><header><h2>Partes do contrato</h2><p>Confira os envolvidos neste contrato de locação e suas funções.</p></header><div className={styles.partiesList}>{[
+        </> : aba === 'partes' ? <article className={`${styles.card} ${styles.partiesCard}`}><header><h2>Partes do contrato</h2><p>Confira os envolvidos neste contrato de locação e suas funções.</p></header><div className={styles.partiesList}>{[
           { pessoa: contexto.proprietario, papel: 'LOCADOR', tom: 'success', apoio: 'Proprietário do imóvel administrado' },
           { pessoa: contexto.inquilino, papel: 'LOCATÁRIO', tom: 'primary', apoio: 'Responsável pela locação' },
           ...(contexto.garantia?.tipo === 'FIADOR' ? [{ pessoa: pessoas.find((p) => p.id === contexto.garantia?.fiadorPessoaId), papel: 'FIADOR', tom: 'secondary', apoio: 'Garantia vinculada ao contrato' }] : []),
-        ].map((item) => <article data-tone={item.tom} key={item.papel}><span className={styles.partyAvatar}>{iniciais(item.pessoa?.nome ?? item.papel)}<i><Icon code={'\uE716'} /></i></span><section><em>{item.papel}</em><h3>{item.pessoa?.nome ?? 'Pessoa não cadastrada'}</h3><p><span><Icon code={'\uE8D7'} /> {item.pessoa?.documentoNormalizado ?? 'Documento não informado'}</span><i>•</i><span><Icon code={'\uE717'} /> {item.pessoa?.telefoneNormalizado ?? 'Telefone não informado'}</span></p><p><span><Icon code={'\uE715'} /> E-mail não disponível no cadastro</span></p><small><Icon code={'\uE707'} /> {item.apoio}</small></section><button type="button" aria-label={`Editar ${item.papel.toLocaleLowerCase('pt-BR')}`} onClick={abrirGestao}><Icon code={'\uE70F'} /></button></article>)}</div><button type="button" className={styles.addParty} onClick={abrirGestao}><Icon code={'\uE710'} /> Adicionar parte ao contrato<small>Inclua locador, locatário, fiador ou responsável</small></button></article>}
+        ].map((item) => <article data-tone={item.tom} key={item.papel}><span className={styles.partyAvatar}>{iniciais(item.pessoa?.nome ?? item.papel)}<i><Icon code={'\uE716'} /></i></span><section><em>{item.papel}</em><h3>{item.pessoa?.nome ?? 'Pessoa não cadastrada'}</h3><p><span><Icon code={'\uE8D7'} /> {item.pessoa?.documentoNormalizado ?? 'Documento não informado'}</span><i>•</i><span><Icon code={'\uE717'} /> {item.pessoa?.telefoneNormalizado ?? 'Telefone não informado'}</span></p><p><span><Icon code={'\uE715'} /> E-mail não disponível no cadastro</span></p><small><Icon code={'\uE707'} /> {item.apoio}</small></section><button type="button" aria-label={`Editar ${item.papel.toLocaleLowerCase('pt-BR')}`} onClick={abrirGestao}><Icon code={'\uE70F'} /></button></article>)}</div><button type="button" className={styles.addParty} onClick={abrirGestao}><Icon code={'\uE710'} /> Adicionar parte ao contrato<small>Inclua locador, locatário, fiador ou responsável</small></button></article> : <section className={styles.contractFinance}>
+          <article className={`${styles.card} ${styles.financeSummary}`}><h2>Resumo financeiro</h2><div>{[
+            ['primary', '\uE8C7', 'Valor do aluguel', moeda(contrato.valorAluguel), ''],
+            ['success', '\uE8B0', 'Valor total do contrato', moeda(totalContrato), `${contrato.prazoMeses} meses`],
+            ['secondary', '\uE8A5', 'Recebido até agora', totalLancado ? moeda(recebidos) : '—', totalLancado ? `${Math.round(recebidos / totalLancado * 100)}% do lançado` : 'sem lançamentos'],
+            ['warning', '\uE823', 'Em aberto', totalLancado ? moeda(emAberto) : '—', totalLancado ? `${Math.round(emAberto / totalLancado * 100)}% do lançado` : 'sem lançamentos'],
+          ].map(([tom, icone, titulo, valor, apoio]) => <span data-tone={tom} key={titulo}><i><Icon code={icone} /></i><small>{titulo}</small><b>{valor}</b>{apoio && <em>{apoio}</em>}</span>)}</div></article>
+          <div className={styles.financeDetails}>
+            <article className={`${styles.card} ${styles.valueBreakdown}`}><h2>Detalhamento de valores</h2><p><span>Aluguel mensal</span><b>{moeda(contrato.valorAluguel)}</b></p><p><span>Encargos cadastrados</span><b>—</b></p><p><span>Taxa de administração</span><b>—</b></p><p><span>Outros valores</span><b>—</b></p><footer><span>Total mensal conhecido</span><b>{moeda(contrato.valorAluguel)}</b></footer><small>Condomínio, IPTU, seguro e taxa administrativa não existem no cadastro atual.</small></article>
+            <article className={`${styles.card} ${styles.adjustmentCard}`}><h2>Reajuste</h2><p><span>Índice de reajuste</span><b>{INDICES[contrato.indiceReajuste]}</b></p><p><span>Periodicidade</span><b>Anual</b></p><p><span>Último reajuste</span><b>{ultimoReajuste?.competencia ?? '—'}</b></p><p><span>Índice aplicado</span><b>{ultimoReajuste ? `${ultimoReajuste.percentualAplicado.toLocaleString('pt-BR')}%` : '—'}</b></p><p><span>Valor após reajuste</span><b>{ultimoReajuste ? moeda(ultimoReajuste.valorAluguelNovo) : '—'}</b></p></article>
+          </div>
+          <article className={`${styles.card} ${styles.paymentHistory}`}><header><h2>Histórico de pagamentos</h2><small>{lancamentosContrato.length} lançamento(s)</small></header><div className={styles.paymentHead}><span>Vencimento</span><span>Descrição</span><span>Valor</span><span>Status</span><span>Pagamento</span><span>Categoria</span><span>Comprovante</span></div>{lancamentosContrato.length ? lancamentosContrato.slice(0, 8).map((item) => <article key={item.id}><time>{data(item.vencimento)}</time><b>{item.descricao}</b><strong>{moeda(item.valor)}</strong><em data-status={item.status}>{item.status === 'LIQUIDADO' ? 'Pago' : item.status === 'PENDENTE' ? 'Pendente' : 'Cancelado'}</em><span>{data(item.dataLiquidacao)}</span><span>{item.categoria.replaceAll('_', ' ').toLocaleLowerCase('pt-BR')}</span><span><Icon code={'\uE8A5'} /></span></article>) : <div className={styles.noPayments}><Icon code={'\uE8C7'} /><b>Nenhum lançamento financeiro</b><small>Cadastre cobranças para acompanhar pagamentos neste contrato.</small></div>}<footer>Exibindo {Math.min(8, lancamentosContrato.length)} de {lancamentosContrato.length} lançamentos <button type="button" onClick={abrirGestao}>Ver todos os lançamentos →</button></footer></article>
+        </section>}
       </div>
 
       <aside className={styles.overviewSide}>
         <article className={`${styles.card} ${styles.statusCard}`}><header><h2>Status do contrato</h2><b><i /> {ESTADOS[contrato.estado]}⌄</b></header><div className={styles.timeline}>{ETAPAS.map((etapa, indice) => <span className={indice <= estadoEtapa ? styles.stepDone : ''} key={etapa}><i>{indice < estadoEtapa ? '✓' : ''}</i><b>{etapa}</b><small>{indice === 0 ? data(contrato.dataInicio) : indice === 1 ? data(contexto.entrada?.dataHora) : indice === 2 ? `até ${data(contrato.vencimentoAtual)}` : indice === 3 ? data(contexto.saida?.dataHora) : '—'}</small></span>)}</div><footer><span><small>Progresso do ciclo</small><i><em style={{ width: `${ciclo}%` }} /></i></span><b>{ciclo}%</b><span><small>Próximo marco</small><strong>{estadoEtapa < 2 ? 'Vigência' : estadoEtapa === 2 ? 'Vistoria de saída' : 'Encerramento'}</strong></span></footer></article>
 
-        <article className={`${styles.card} ${styles.financialCard}`}><header><h2>Resumo financeiro</h2><button type="button" onClick={abrirGestao}>Ver detalhes →</button></header><div><span><small>Valor do aluguel</small><b>{moeda(contrato.valorAluguel)}</b></span><span><small>Encargos</small><b>—</b></span><span><small>Valor total</small><b>—</b></span><span><small>Dia do vencimento</small><b>Todo dia {contrato.diaVencimento}</b></span><span><small>Índice de reajuste</small><b>{INDICES[contrato.indiceReajuste]}</b></span><span><small>Próximo reajuste</small><b>{data(contrato.vencimentoAtual)}</b></span></div><p>Encargos e taxa de administração não são calculados pelo backend atual.</p></article>
-
-        <article className={`${styles.card} ${styles.quickCard}`}><h2>Ações rápidas</h2>{[
-          ['\uE8C7', 'Emitir boleto', 'Cobrança ainda não integrada', 'success'], ['\uE8B0', 'Registrar pagamento', 'Módulo de pagamentos pendente', 'primary'],
-          ['\uE787', 'Agendar vistoria de saída', contexto.saida ? `Vistoria: ${data(contexto.saida.dataHora)}` : 'Agende a vistoria do imóvel', 'secondary'], ['\uE715', 'Enviar comunicado', 'Gerencie o portal das partes', 'warning'],
-        ].map(([icone, titulo, apoio, tom]) => <button type="button" onClick={abrirGestao} data-tone={tom} key={titulo}><span><Icon code={icone} /></span><b>{titulo}<small>{apoio}</small></b><em>›</em></button>)}</article>
+        {aba === 'financeiro' ? <>
+          <article className={`${styles.card} ${styles.dueCard}`}><header><h2>Próximos vencimentos</h2><button type="button" onClick={abrirGestao}>Ver calendário →</button></header>{proximoVencimento ? <div><time><b>{new Date(proximoVencimento.vencimento).getUTCDate()}</b><small>{new Date(proximoVencimento.vencimento).toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' }).replace('.', '').toLocaleUpperCase('pt-BR')}</small></time><span><small>{proximoVencimento.descricao}</small><b>{moeda(proximoVencimento.valor)}</b></span><em>Pendente</em></div> : <p><Icon code={'\uE787'} /> Nenhum vencimento pendente registrado.</p>}<button type="button" onClick={abrirGestao}>Ver todos os vencimentos →</button></article>
+          <article className={`${styles.card} ${styles.quickCard}`}><h2>Ações rápidas</h2>{[
+            ['\uE8B0', 'Registrar pagamento', 'Liquidar um lançamento pendente', 'primary'], ['\uE8C7', 'Gerar boleto', 'Integração bancária ainda indisponível', 'success'],
+            ['\uE715', 'Enviar lembrete', 'Use o portal do locatário', 'warning'], ['\uE8A5', 'Extrato financeiro', `${lancamentosContrato.length} lançamento(s) no contrato`, 'primary'],
+          ].map(([icone, titulo, apoio, tom]) => <button type="button" onClick={abrirGestao} data-tone={tom} key={titulo}><span><Icon code={icone} /></span><b>{titulo}<small>{apoio}</small></b><em>›</em></button>)}</article>
+          <article className={`${styles.card} ${styles.financeHelp}`}><span><Icon code={'\uE897'} /></span><p><b>Dúvidas sobre o financeiro?</b><small>Consulte a gestão avançada do contrato</small></p><button type="button" onClick={abrirGestao}>→</button></article>
+        </> : <>
+          <article className={`${styles.card} ${styles.financialCard}`}><header><h2>Resumo financeiro</h2><button type="button" onClick={() => setAba('financeiro')}>Ver detalhes →</button></header><div><span><small>Valor do aluguel</small><b>{moeda(contrato.valorAluguel)}</b></span><span><small>Encargos</small><b>—</b></span><span><small>Valor total</small><b>—</b></span><span><small>Dia do vencimento</small><b>Todo dia {contrato.diaVencimento}</b></span><span><small>Índice de reajuste</small><b>{INDICES[contrato.indiceReajuste]}</b></span><span><small>Próximo reajuste</small><b>{data(contrato.vencimentoAtual)}</b></span></div><p>Encargos e taxa de administração não são calculados pelo backend atual.</p></article>
+          <article className={`${styles.card} ${styles.quickCard}`}><h2>Ações rápidas</h2>{[
+            ['\uE8C7', 'Emitir boleto', 'Cobrança ainda não integrada', 'success'], ['\uE8B0', 'Registrar pagamento', 'Módulo de pagamentos pendente', 'primary'],
+            ['\uE787', 'Agendar vistoria de saída', contexto.saida ? `Vistoria: ${data(contexto.saida.dataHora)}` : 'Agende a vistoria do imóvel', 'secondary'], ['\uE715', 'Enviar comunicado', 'Gerencie o portal das partes', 'warning'],
+          ].map(([icone, titulo, apoio, tom]) => <button type="button" onClick={abrirGestao} data-tone={tom} key={titulo}><span><Icon code={icone} /></span><b>{titulo}<small>{apoio}</small></b><em>›</em></button>)}</article>
+        </>}
       </aside>
     </div>
   </section>;

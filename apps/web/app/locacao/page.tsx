@@ -28,6 +28,11 @@ import { buttonStyle, buttonSecondaryStyle, cardStyle, inputStyle } from '../../
 import { LocacaoOverview } from './locacao-overview';
 import styles from './locacao.module.css';
 
+type LancamentoFinanceiro = {
+  id: string; contratoDeLocacaoId: string | null; tipo: 'A_PAGAR' | 'A_RECEBER'; categoria: string;
+  descricao: string; valor: number; vencimento: string; status: 'PENDENTE' | 'LIQUIDADO' | 'CANCELADO'; dataLiquidacao: string | null;
+};
+
 const ROTULOS_INDICE: Record<IndiceReajuste, string> = { IGPM: 'IGP-M', IPCA: 'IPCA', OUTRO: 'Outro' };
 const INDICES: IndiceReajuste[] = ['IGPM', 'IPCA', 'OUTRO'];
 const ROTULOS_TIPO_GARANTIA: Record<GarantiaTipo, string> = { FIADOR: 'Fiador', CAUCAO: 'Caução', SEGURO_FIANCA: 'Seguro-fiança' };
@@ -75,6 +80,7 @@ export default function LocacaoPage() {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [administracoes, setAdministracoes] = useState<ContratoDeAdministracao[]>([]);
   const [locacoes, setLocacoes] = useState<ContratoDeLocacao[]>([]);
+  const [lancamentosFinanceiros, setLancamentosFinanceiros] = useState<LancamentoFinanceiro[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [carregado, setCarregado] = useState(false);
 
@@ -133,18 +139,20 @@ export default function LocacaoPage() {
 
   async function carregar() {
     try {
-      const [listaUnidades, listaImoveis, listaPessoas, listaAdministracoes, listaLocacoes] = await Promise.all([
+      const [listaUnidades, listaImoveis, listaPessoas, listaAdministracoes, listaLocacoes, listaLancamentos] = await Promise.all([
         apiFetch<Unidade[]>('/unidades'),
         apiFetch<Imovel[]>('/imoveis'),
         apiFetch<Pessoa[]>('/pessoas'),
         apiFetch<ContratoDeAdministracao[]>('/locacao/administracao-contratos'),
         apiFetch<ContratoDeLocacao[]>('/locacao/contratos'),
+        apiFetch<LancamentoFinanceiro[]>('/lancamentos-financeiros').catch(() => []),
       ]);
       setUnidades(listaUnidades);
       setImoveis(listaImoveis);
       setPessoas(listaPessoas);
       setAdministracoes(listaAdministracoes);
       setLocacoes(listaLocacoes);
+      setLancamentosFinanceiros(listaLancamentos);
 
       const [listasGarantias, listasVistorias] = await Promise.all([
         Promise.all(listaLocacoes.map((l) => apiFetch<Garantia[]>(`/locacao/contratos/${l.id}/garantias`))),
@@ -590,6 +598,7 @@ export default function LocacaoPage() {
         vistorias={vistoriasPorContrato}
         reajustes={reajustesPorContrato}
         documentos={documentosPorContrato}
+        lancamentos={lancamentosFinanceiros}
       />
       <details className={styles.advanced} id="gestao-tecnica-locacao">
         <summary>Gestão avançada do contrato e cadastros</summary>
