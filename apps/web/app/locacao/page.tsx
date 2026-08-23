@@ -25,6 +25,8 @@ import type {
 import { useAuth } from '../../components/auth-context';
 import { apiFetch, ApiError } from '../../lib/api';
 import { buttonStyle, buttonSecondaryStyle, cardStyle, inputStyle } from '../../lib/styles';
+import { LocacaoOverview } from './locacao-overview';
+import styles from './locacao.module.css';
 
 const ROTULOS_INDICE: Record<IndiceReajuste, string> = { IGPM: 'IGP-M', IPCA: 'IPCA', OUTRO: 'Outro' };
 const INDICES: IndiceReajuste[] = ['IGPM', 'IPCA', 'OUTRO'];
@@ -230,6 +232,17 @@ export default function LocacaoPage() {
     if (!sessao) return;
     carregar();
   }, [sessao?.tenantId]);
+
+  useEffect(() => {
+    const abrirPeloHash = () => {
+      if (window.location.hash !== '#gestao-tecnica-locacao') return;
+      const detalhe = document.getElementById('gestao-tecnica-locacao') as HTMLDetailsElement | null;
+      if (detalhe) detalhe.open = true;
+    };
+    abrirPeloHash();
+    window.addEventListener('hashchange', abrirPeloHash);
+    return () => window.removeEventListener('hashchange', abrirPeloHash);
+  }, [carregado]);
 
   async function criarAdministracao(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -567,7 +580,20 @@ export default function LocacaoPage() {
   }
 
   return (
-    <main>
+    <main className={styles.legacy}>
+      <LocacaoOverview
+        locacoes={locacoes}
+        administracoes={administracoes}
+        imoveis={imoveis}
+        pessoas={pessoas}
+        garantias={garantiasPorContrato}
+        vistorias={vistoriasPorContrato}
+        reajustes={reajustesPorContrato}
+        documentos={documentosPorContrato}
+      />
+      <details className={styles.advanced} id="gestao-tecnica-locacao">
+        <summary>Gestão avançada do contrato e cadastros</summary>
+        <div>
       <h1>Locação</h1>
       <p style={{ color: 'var(--muted)', fontSize: 12 }}>
         Fase 2 (ART-010/ART-015) — contrato de administração, contrato de locação, garantias
@@ -1096,6 +1122,8 @@ export default function LocacaoPage() {
           </div>
         );
       })}
+        </div>
+      </details>
     </main>
   );
 }
