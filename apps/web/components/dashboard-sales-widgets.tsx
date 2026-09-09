@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactElement } from 'react';
 import type { IndicadoresFunil } from '@crm/shared';
 import { useTheme } from './theme-context';
 
@@ -89,7 +89,7 @@ interface EtapaFunilCompacto {
   nome: string;
   valor: number;
   percentual: number;
-  icone: JSX.Element;
+  icone: ReactElement;
 }
 
 /** Mesmo cálculo de SalesFunnelCard (components/sales-funnel-card.tsx) — mantém as duas telas consistentes. */

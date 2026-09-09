@@ -229,7 +229,9 @@ describe('VistoriasService', () => {
       evidencias: null,
       realizadaEm: new Date('2026-08-06T10:00:00.000Z'),
       realizadoPorUsuarioId: gestor.id,
-      prazoContestacaoAte: new Date('2026-08-13T10:00:00.000Z'),
+      // Prazo relativo a "agora" para o teste do caminho feliz nao virar um
+      // time-bomb: a data precisa estar sempre no futuro quando a suite roda.
+      prazoContestacaoAte: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       criadoEm: new Date('2026-08-06T10:00:00.000Z'),
     };
 
